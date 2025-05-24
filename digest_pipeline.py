@@ -9,6 +9,7 @@ import os
 READWISE_TOKEN = os.getenv("READWISE_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 BUTTONDOWN_TOKEN = os.getenv("BUTTONDOWN_TOKEN")
+SAFE_MODE = True
 
 tag_filter = "ohmbudsman"
 num_articles = 5
@@ -31,7 +32,8 @@ def fetch_readwise_reader_articles():
         if tag_filter not in tags:
             continue
         created_time = datetime.datetime.fromisoformat(item["created_at"].replace("Z", "+00:00"))
-        if created_time >= past_24:
+        content = item.get("content") or ''
+        if created_time >= past_24 and len(content.strip()) >= 100:
             filtered.append(item)
 
     return filtered
@@ -40,11 +42,9 @@ def summarize_articles(articles):
     chunks = [articles[i:i+num_articles] for i in range(0, len(articles), num_articles)]
     summaries = []
     for chunk in chunks:
-        prompt = "Summarize the following articles for an Ohmbudsman digest. Output in Markdown:\n"
+        prompt = "You are creating a geopolitical digest using Disguised SNAP formatting. Summarize the following articles in concise, structured Markdown. Each summary should include a bolded headline, 1-2 sentence context, and the original source URL.\n\n"
         for i, article in enumerate(chunk):
-            prompt += f"{i+1}. {article['title']} – {article.get('source_url', 'Unknown')}\n"
-            content = article.get('content') or ''
-            prompt += f"Excerpt: {content[:500]}\n\n"
+            prompt += f"**{article['title']}**\nSource: {article.get('source_url', 'Unknown')}\nExcerpt: {article.get('content')[:500]}\n\n"
         chat_payload = {
             "model": "gpt-4",
             "messages": [
@@ -80,7 +80,7 @@ Licensed under Creative Commons BY-NC 4.0
 https://creativecommons.org/licenses/by-nc/4.0/
 """
     headers = {"Authorization": f"Token {BUTTONDOWN_TOKEN}"}
-    payload = {"subject": title, "body": content, "draft": True}
+    payload = {"subject": title, "body": content, "draft": True if SAFE_MODE else False}
     res = requests.post("https://api.buttondown.email/v1/emails", headers=headers, json=payload)
     res.raise_for_status()
     return res.json()
