@@ -33,7 +33,9 @@ def fetch_readwise_reader_articles():
             continue
         created_time = datetime.datetime.fromisoformat(item["created_at"].replace("Z", "+00:00"))
         content = item.get("content") or ''
-        if created_time >= past_24 and len(content.strip()) >= 100:
+        if created_time >= past_24:
+            if len(content.strip()) < 100:
+                print(f"⚠ Short content: {item['title'][:60]}")
             filtered.append(item)
 
     return filtered
@@ -44,7 +46,13 @@ def summarize_articles(articles):
     for chunk in chunks:
         prompt = "You are creating a geopolitical digest using Disguised SNAP formatting. Summarize the following articles in concise, structured Markdown. Each summary should include a bolded headline, 1-2 sentence context, and the original source URL.\n\n"
         for i, article in enumerate(chunk):
-            prompt += f"**{article['title']}**\nSource: {article.get('source_url', 'Unknown')}\nExcerpt: {article.get('content')[:500]}\n\n"
+            title = article['title']
+            source = article.get('source_url', 'Unknown')
+            content = article.get('content') or ''
+            if len(content.strip()) < 100:
+                content_note = "(⚠ Short content – summarize accordingly)"
+                content = f"{content_note}\n{content}"
+            prompt += f"**{title}**\nSource: {source}\nExcerpt: {content[:500]}\n\n"
         chat_payload = {
             "model": "gpt-4",
             "messages": [
