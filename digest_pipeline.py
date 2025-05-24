@@ -25,16 +25,21 @@ def fetch_readwise_articles_filtered():
     now = datetime.datetime.now(tz=cst)
     start = now.replace(hour=6, minute=0, second=0, microsecond=0)
     end = now.replace(hour=20, minute=0, second=0, microsecond=0)
-    start_utc = start.astimezone(utc).isoformat()
-    end_utc = end.astimezone(utc).isoformat()
 
     # Fetch all highlights
     res = requests.get(url, headers=headers)
     res.raise_for_status()
     highlights = res.json()["results"]
 
-    # Filter by time window
-    filtered = [h for h in highlights if start_utc <= h['updated'] <= end_utc and tag_filter in [t['name'] for t in h.get('tags', [])]]
+    # Filter using 'highlighted_at' instead of 'updated'
+    filtered = []
+    for h in highlights:
+        if tag_filter not in [t['name'] for t in h.get('tags', [])]:
+            continue
+        h_time = datetime.datetime.fromisoformat(h['highlighted_at'].replace('Z', '+00:00')).astimezone(cst)
+        if start <= h_time <= end:
+            filtered.append(h)
+
     return filtered
 
 def summarize_articles(articles):
@@ -87,14 +92,18 @@ https://creativecommons.org/licenses/by-nc/4.0/
 
 # --- MAIN EXECUTION ---
 if __name__ == "__main__":
-    print("Fetching articles from 6 AM to 8 PM CST...")
-    articles = fetch_readwise_articles_filtered()
-    print(f"Fetched {len(articles)} articles.")
-    if not articles:
-        print("No articles found in the specified time window.")
-    else:
-        print("Summarizing via GPT...")
-        digest = summarize_articles(articles)
-        print("Posting draft to Buttondown...")
-        result = post_to_buttondown(digest)
-        print("Success:", result['id'])
+    try:
+        print("Fetching articles from 6 AM to 8 PM CST based on 'highlighted_at'...")
+        articles = fetch_readwise_articles_filtered()
+        print(f"Fetched {len(articles)} articles.")
+        if not articles:
+            print("No articles found in the specified time window.")
+        else:
+            print("Summarizing via GPT...")
+            digest = summarize_articles(articles)
+            print("Posting draft to Buttondown...")
+            result = post_to_buttondown(digest)
+            print("Success:", result['id'])
+    except Exception as e:
+        print("ERROR:", e)
+        raise
