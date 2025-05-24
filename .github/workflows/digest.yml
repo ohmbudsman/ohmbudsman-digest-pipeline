@@ -2,8 +2,8 @@ name: Run Digest Pipeline
 
 on:
   workflow_dispatch:
-schedule:
-  - cron: '1 2 * * *'  # Every day at 2:01 AM UTC = 8:01 PM CST
+  schedule:
+    - cron: '1 2 * * *'  # 2:01 AM UTC = 8:01 PM CST
 
 jobs:
   digest:
