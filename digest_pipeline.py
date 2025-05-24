@@ -41,18 +41,21 @@ def fetch_readwise_reader_articles():
     return filtered
 
 def summarize_articles(articles):
+    today = datetime.date.today().strftime("%Y-%m-%d")
     chunks = [articles[i:i+num_articles] for i in range(0, len(articles), num_articles)]
-    summaries = []
+    summaries = [f"# The Rundown – {today}\n"]
     for chunk in chunks:
-        prompt = "You are creating a geopolitical digest using Disguised SNAP formatting. Summarize the following articles in concise, structured Markdown. Each summary should include a bolded headline, 1-2 sentence context, and the original source URL.\n\n"
-        for i, article in enumerate(chunk):
+        prompt = "Create a geopolitical media digest in Markdown using the following strict format for each article:\n\n"
+        prompt += "🧠 **HEADLINE**\n— A 1-2 sentence summary or insight.\n🔗 [Source](URL)\n\n"
+        prompt += "Articles:\n\n"
+        for article in chunk:
             title = article['title']
             source = article.get('source_url', 'Unknown')
             content = article.get('content') or ''
             if len(content.strip()) < 100:
                 content_note = "(⚠ Short content – summarize accordingly)"
                 content = f"{content_note}\n{content}"
-            prompt += f"**{title}**\nSource: {source}\nExcerpt: {content[:500]}\n\n"
+            prompt += f"Title: {title}\nSource: {source}\nContent: {content[:500]}\n\n"
         chat_payload = {
             "model": "gpt-4",
             "messages": [
@@ -88,7 +91,17 @@ Licensed under Creative Commons BY-NC 4.0
 https://creativecommons.org/licenses/by-nc/4.0/
 """
     headers = {"Authorization": f"Token {BUTTONDOWN_TOKEN}"}
-    payload = {"subject": title, "body": content, "draft": True if SAFE_MODE else False}
+    payload = {"subject": title, "body": content, "draft": True}
+
+    if SAFE_MODE:
+        print("SAFE MODE ENABLED: Posting as draft only.")
+    else:
+        confirm = input("Are you sure you want to send live? (yes/no): ")
+        if confirm.lower() != "yes":
+            print("Live send aborted.")
+            return {"id": "draft-aborted"}
+        payload["draft"] = False
+
     res = requests.post("https://api.buttondown.email/v1/emails", headers=headers, json=payload)
     res.raise_for_status()
     return res.json()
