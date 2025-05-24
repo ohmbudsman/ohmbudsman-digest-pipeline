@@ -23,17 +23,20 @@ def fetch_readwise_reader_articles():
     res.raise_for_status()
     items = res.json().get("results", [])
 
-    # Log details of fetched articles
+    print("Logging raw articles from Readwise Reader:")
     for item in items:
         title = item.get("title", "No Title")
         tags = item.get("tags", [])
         created_at = item.get("created_at", "No Timestamp")
-        print(f"Title: {title}, Tags: {tags}, Created At: {created_at}")
+        updated_at = item.get("updated_at", "No Timestamp")
+        source = item.get("source_url", "No URL")
+        print(f"- Title: {title}")
+        print(f"  Tags: {tags}")
+        print(f"  Created At: {created_at}")
+        print(f"  Updated At: {updated_at}")
+        print(f"  Source URL: {source}\n")
 
-    # Apply your existing filters here
-    # ...
-
-    return filtered
+    return items  # No filtering, just dump everything for diagnostics
 
 def summarize_articles(articles):
     chunks = [articles[i:i+num_articles] for i in range(0, len(articles), num_articles)]
