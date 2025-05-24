@@ -1,4 +1,4 @@
-# Digest Automation Pipeline (Readwise → GPT → Buttondown)
+# Digest Automation Pipeline (Readwise Reader → GPT → Buttondown)
 
 import requests
 import datetime
@@ -15,30 +15,28 @@ tag_filter = "ohmbudsman"
 num_articles = 5
 
 # --- FUNCTIONS ---
-def fetch_readwise_articles_filtered():
-    url = "https://readwise.io/api/v2/highlights/"
+def fetch_readwise_reader_articles():
+    url = "https://readwise.io/api/v3/list/"
     headers = {"Authorization": f"Token {READWISE_TOKEN}"}
+    params = {"category": "articles"}
+    res = requests.get(url, headers=headers, params=params)
+    res.raise_for_status()
+    items = res.json().get("results", [])
 
-    # Set time window in CST and convert to UTC
+    # Set time window in CST
     cst = tz.gettz('America/Chicago')
-    utc = tz.gettz('UTC')
     now = datetime.datetime.now(tz=cst)
     start = now.replace(hour=6, minute=0, second=0, microsecond=0)
     end = now.replace(hour=20, minute=0, second=0, microsecond=0)
 
-    # Fetch all highlights
-    res = requests.get(url, headers=headers)
-    res.raise_for_status()
-    highlights = res.json()["results"]
-
-    # Filter using 'highlighted_at' instead of 'updated'
+    # Filter by tag and creation time
     filtered = []
-    for h in highlights:
-        if tag_filter not in [t['name'] for t in h.get('tags', [])]:
+    for item in items:
+        if tag_filter not in item.get("tags", []):
             continue
-        h_time = datetime.datetime.fromisoformat(h['highlighted_at'].replace('Z', '+00:00')).astimezone(cst)
-        if start <= h_time <= end:
-            filtered.append(h)
+        created_time = datetime.datetime.fromisoformat(item["created_at"][:-1]).astimezone(cst)
+        if start <= created_time <= end:
+            filtered.append(item)
 
     return filtered
 
@@ -49,7 +47,7 @@ def summarize_articles(articles):
         prompt = "Summarize the following articles for an Ohmbudsman digest. Output in Markdown:\n"
         for i, article in enumerate(chunk):
             prompt += f"{i+1}. {article['title']} – {article.get('source_url', 'Unknown')}\n"
-            prompt += f"Excerpt: {article.get('text', '')[:500]}\n\n"
+            prompt += f"Excerpt: {article.get('content', '')[:500]}\n\n"
         chat_payload = {
             "model": "gpt-4",
             "messages": [
@@ -93,8 +91,8 @@ https://creativecommons.org/licenses/by-nc/4.0/
 # --- MAIN EXECUTION ---
 if __name__ == "__main__":
     try:
-        print("Fetching articles from 6 AM to 8 PM CST based on 'highlighted_at'...")
-        articles = fetch_readwise_articles_filtered()
+        print("Fetching Readwise Reader articles from 6 AM to 8 PM CST...")
+        articles = fetch_readwise_reader_articles()
         print(f"Fetched {len(articles)} articles.")
         if not articles:
             print("No articles found in the specified time window.")
