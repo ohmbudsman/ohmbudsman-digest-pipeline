@@ -20,6 +20,6 @@ jobs:
           python-version: '3.11'
       - name: Install dependencies
         run: |
-          pip install requests python-dotenv
+          pip install requests python-dotenv python-dateutil
       - name: Run digest pipeline
         run: python digest_pipeline.py
