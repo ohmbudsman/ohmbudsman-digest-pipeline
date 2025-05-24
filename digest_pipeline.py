@@ -43,7 +43,8 @@ def summarize_articles(articles):
         prompt = "Summarize the following articles for an Ohmbudsman digest. Output in Markdown:\n"
         for i, article in enumerate(chunk):
             prompt += f"{i+1}. {article['title']} – {article.get('source_url', 'Unknown')}\n"
-            prompt += f"Excerpt: {article.get('content', '')[:500]}\n\n"
+            content = article.get('content') or ''
+            prompt += f"Excerpt: {content[:500]}\n\n"
         chat_payload = {
             "model": "gpt-4",
             "messages": [
