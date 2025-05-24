@@ -23,18 +23,15 @@ def fetch_readwise_reader_articles():
     res.raise_for_status()
     items = res.json().get("results", [])
 
-    # Calculate 24-hour window
-    utc_now = datetime.datetime.now(datetime.timezone.utc)
-    past_24 = utc_now - datetime.timedelta(hours=24)
-
-    # Filter by tag and created_at in past 24 hours
-    filtered = []
+    # Log details of fetched articles
     for item in items:
-        if tag_filter not in item.get("tags", []):
-            continue
-        created_time = datetime.datetime.fromisoformat(item["created_at"].replace("Z", "+00:00"))
-        if created_time >= past_24:
-            filtered.append(item)
+        title = item.get("title", "No Title")
+        tags = item.get("tags", [])
+        created_at = item.get("created_at", "No Timestamp")
+        print(f"Title: {title}, Tags: {tags}, Created At: {created_at}")
+
+    # Apply your existing filters here
+    # ...
 
     return filtered
 
