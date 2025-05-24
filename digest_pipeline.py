@@ -4,6 +4,7 @@ import requests
 import datetime
 import hashlib
 import os
+from dateutil import tz
 
 # --- CONFIG ---
 READWISE_TOKEN = os.getenv("READWISE_TOKEN")
@@ -14,13 +15,27 @@ tag_filter = "ohmbudsman"
 num_articles = 5
 
 # --- FUNCTIONS ---
-def fetch_readwise_articles(tag):
+def fetch_readwise_articles_filtered():
     url = "https://readwise.io/api/v2/highlights/"
     headers = {"Authorization": f"Token {READWISE_TOKEN}"}
-    params = {"page_size": 50, "tags": tag}
-    res = requests.get(url, headers=headers, params=params)
+
+    # Set time window in CST and convert to UTC
+    cst = tz.gettz('America/Chicago')
+    utc = tz.gettz('UTC')
+    now = datetime.datetime.now(tz=cst)
+    start = now.replace(hour=6, minute=0, second=0, microsecond=0)
+    end = now.replace(hour=20, minute=0, second=0, microsecond=0)
+    start_utc = start.astimezone(utc).isoformat()
+    end_utc = end.astimezone(utc).isoformat()
+
+    # Fetch all highlights
+    res = requests.get(url, headers=headers)
     res.raise_for_status()
-    return res.json()["results"]
+    highlights = res.json()["results"]
+
+    # Filter by time window
+    filtered = [h for h in highlights if start_utc <= h['updated'] <= end_utc and tag_filter in [t['name'] for t in h.get('tags', [])]]
+    return filtered
 
 def summarize_articles(articles):
     chunks = [articles[i:i+num_articles] for i in range(0, len(articles), num_articles)]
@@ -72,11 +87,14 @@ https://creativecommons.org/licenses/by-nc/4.0/
 
 # --- MAIN EXECUTION ---
 if __name__ == "__main__":
-    print("Fetching articles...")
-    articles = fetch_readwise_articles(tag_filter)
+    print("Fetching articles from 6 AM to 8 PM CST...")
+    articles = fetch_readwise_articles_filtered()
     print(f"Fetched {len(articles)} articles.")
-    print("Summarizing via GPT...")
-    digest = summarize_articles(articles)
-    print("Posting draft to Buttondown...")
-    result = post_to_buttondown(digest)
-    print("Success:", result['id'])
+    if not articles:
+        print("No articles found in the specified time window.")
+    else:
+        print("Summarizing via GPT...")
+        digest = summarize_articles(articles)
+        print("Posting draft to Buttondown...")
+        result = post_to_buttondown(digest)
+        print("Success:", result['id'])
