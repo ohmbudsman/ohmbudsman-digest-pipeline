@@ -23,19 +23,17 @@ def fetch_readwise_reader_articles():
     res.raise_for_status()
     items = res.json().get("results", [])
 
-    # Set time window in CST
-    cst = tz.gettz('America/Chicago')
-    now = datetime.datetime.now(tz=cst)
-    start = now.replace(hour=6, minute=0, second=0, microsecond=0)
-    end = now.replace(hour=20, minute=0, second=0, microsecond=0)
+    # Calculate 24-hour window
+    utc_now = datetime.datetime.now(datetime.timezone.utc)
+    past_24 = utc_now - datetime.timedelta(hours=24)
 
-    # Filter by tag and creation time
+    # Filter by tag and created_at in past 24 hours
     filtered = []
     for item in items:
         if tag_filter not in item.get("tags", []):
             continue
-        created_time = datetime.datetime.fromisoformat(item["created_at"][:-1]).astimezone(cst)
-        if start <= created_time <= end:
+        created_time = datetime.datetime.fromisoformat(item["created_at"].replace("Z", "+00:00"))
+        if created_time >= past_24:
             filtered.append(item)
 
     return filtered
@@ -91,11 +89,11 @@ https://creativecommons.org/licenses/by-nc/4.0/
 # --- MAIN EXECUTION ---
 if __name__ == "__main__":
     try:
-        print("Fetching Readwise Reader articles from 6 AM to 8 PM CST...")
+        print("Fetching Readwise Reader articles from the past 24 hours...")
         articles = fetch_readwise_reader_articles()
         print(f"Fetched {len(articles)} articles.")
         if not articles:
-            print("No articles found in the specified time window.")
+            print("No articles found in the past 24 hours.")
         else:
             print("Summarizing via GPT...")
             digest = summarize_articles(articles)
