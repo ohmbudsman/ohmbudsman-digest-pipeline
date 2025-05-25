@@ -9,7 +9,8 @@ import os
 READWISE_TOKEN = os.getenv("READWISE_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 BUTTONDOWN_TOKEN = os.getenv("BUTTONDOWN_TOKEN")
-SAFE_MODE = True
+
+SAFE_MODE = True  # Always true, hardcoded for security
 
 tag_filter = "ohmbudsman"
 num_articles = 5
@@ -33,8 +34,6 @@ def fetch_readwise_reader_articles():
         created_time = datetime.datetime.fromisoformat(item["created_at"].replace("Z", "+00:00"))
         content = item.get("content") or ''
         if created_time >= past_24:
-            if len(content.strip()) < 100:
-                print(f"⚠ Short content: {item['title'][:60]}")
             filtered.append(item)
 
     return filtered
@@ -45,30 +44,19 @@ def summarize_articles(articles):
     summaries = [f"# The Rundown – {today}\n"]
     for chunk in chunks:
         prompt = (
-            "Summarize each article in Disguised-SNAP format with the following structure:\n"
-            "1. 🧠 **HEADLINE** – ≤11 words, Title Case\n"
-            "2. — NUTSHELL – 1 sentence summary\n"
-            "3. 📍 DATELINE / ACTORS – Location, date, actors\n"
-            "4. 🟢 IMPACT – + bolded verb\n"
-            "5. 📊 DATA – One numerical stat\n"
-            "6. 💬 QUOTE – Short quote + attribution\n"
-            "7. *BRIDGE* – 1 italic sentence linking to broader trend\n"
-            "8. ❓ HOOK – 1 rhetorical question\n"
-            "9. 🔚 TAKEAWAY – ≤12 word bold summary\n"
-            "10. (Source: URL)\n"
+            "For each of the following articles, create a digest summary using Disguised-SNAP format. Structure each as follows:\n"
+            "1. 🧠 **HEADLINE**\n2. — NUTSHELL\n3. 📍 DATELINE / ACTORS\n4. 🟢 IMPACT\n5. 📊 DATA\n6. 💬 QUOTE\n7. *BRIDGE*\n8. ❓ HOOK\n9. 🔚 TAKEAWAY\n10. (Source: URL)\n\n"
         )
         for article in chunk:
             title = article['title']
             source = article.get('source_url', 'Unknown')
             content = article.get('content') or ''
-            if len(content.strip()) < 100:
-                content_note = "(⚠ Short content – summarize accordingly)"
-                content = f"{content_note}\n{content}"
-            prompt += f"\nTitle: {title}\nSource: {source}\nContent: {content[:1000]}\n"
+            prompt += f"Title: {title}\nSource: {source}\nContent: {content[:1000]}\n\n"
+
         chat_payload = {
             "model": "gpt-4",
             "messages": [
-                {"role": "system", "content": "You are a geopolitical digest writer following Disguised-SNAP formatting strictly."},
+                {"role": "system", "content": "You are a formatting assistant writing geopolitical digest content in Disguised-SNAP format."},
                 {"role": "user", "content": prompt}
             ]
         }
@@ -103,7 +91,7 @@ https://creativecommons.org/licenses/by-nc/4.0/
     payload = {
         "subject": title,
         "body": content,
-        "draft": True  # hard-coded to always save as draft
+        "status": "draft"  # Explicitly set as draft
     }
     print("SAFE MODE ENABLED: Posting as draft only.")
     res = requests.post("https://api.buttondown.email/v1/emails", headers=headers, json=payload)
