@@ -1,0 +1,7 @@
+Follow the Disguised-SNAP Style Guide:
+- 9 top-level headings (#).
+- Sentences ≤ 15 words.
+- Each bullet (- ) contains exactly one emoji.
+- Bullets ≤ 15 words.
+- Include exactly one URL per section.
+- ...
