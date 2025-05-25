@@ -13,7 +13,6 @@ BUTTONDOWN_TOKEN = os.getenv("BUTTONDOWN_TOKEN")
 SAFE_MODE = True  # Always true, hardcoded for security
 
 tag_filter = "ohmbudsman"
-num_articles = 5
 
 # --- FUNCTIONS ---
 def fetch_readwise_reader_articles():
@@ -40,30 +39,38 @@ def fetch_readwise_reader_articles():
 
 def summarize_articles(articles):
     today = datetime.date.today().strftime("%Y-%m-%d")
-    chunks = [articles[i:i+num_articles] for i in range(0, len(articles), num_articles)]
     summaries = [f"# The Rundown – {today}\n"]
-    for chunk in chunks:
-        prompt = (
-            "For each of the following articles, create a digest summary using Disguised-SNAP format. Structure each as follows:\n"
-            "1. 🧠 **HEADLINE**\n2. — NUTSHELL\n3. 📍 DATELINE / ACTORS\n4. 🟢 IMPACT\n5. 📊 DATA\n6. 💬 QUOTE\n7. *BRIDGE*\n8. ❓ HOOK\n9. 🔚 TAKEAWAY\n10. (Source: URL)\n\n"
-        )
-        for article in chunk:
-            title = article['title']
-            source = article.get('source_url', 'Unknown')
-            content = article.get('content') or ''
-            prompt += f"Title: {title}\nSource: {source}\nContent: {content[:1000]}\n\n"
+    prompt = (
+        "For each of the following articles, create a digest summary using Disguised-SNAP format. Structure each as follows:\n"
+        "🧠 HEADLINE\n"
+        "— NUTSHELL\n"
+        "📍 DATELINE / ACTORS\n"
+        "🟢 IMPACT\n"
+        "📊 DATA\n"
+        "💬 QUOTE\n"
+        "BRIDGE\n"
+        "❓ HOOK\n"
+        "🔚 TAKEAWAY\n"
+        "(Source: URL)\n\n"
+    )
+    for article in articles:
+        title = article['title']
+        source = article.get('source_url', 'Unknown')
+        content = article.get('content') or ''
+        prompt += f"Title: {title}\nSource: {source}\nContent: {content[:1000]}\n\n"
 
-        chat_payload = {
-            "model": "gpt-4",
-            "messages": [
-                {"role": "system", "content": "You are a formatting assistant writing geopolitical digest content in Disguised-SNAP format."},
-                {"role": "user", "content": prompt}
-            ]
-        }
-        headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
-        response = requests.post("https://api.openai.com/v1/chat/completions", json=chat_payload, headers=headers)
-        response.raise_for_status()
-        summaries.append(response.json()['choices'][0]['message']['content'])
+    chat_payload = {
+        "model": "gpt-4",
+        "messages": [
+            {"role": "system", "content": "You are a formatting assistant writing geopolitical digest content in Disguised-SNAP format."},
+            {"role": "user", "content": prompt}
+        ]
+    }
+    headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
+    response = requests.post("https://api.openai.com/v1/chat/completions", json=chat_payload, headers=headers)
+    response.raise_for_status()
+    summaries.append(response.json()['choices'][0]['message']['content'])
+
     return "\n---\n\n".join(summaries)
 
 def post_to_buttondown(markdown_text):
@@ -91,7 +98,7 @@ https://creativecommons.org/licenses/by-nc/4.0/
     payload = {
         "subject": title,
         "body": content,
-        "status": "draft"  # Explicitly set as draft
+        "status": "draft"
     }
     print("SAFE MODE ENABLED: Posting as draft only.")
     res = requests.post("https://api.buttondown.email/v1/emails", headers=headers, json=payload)
