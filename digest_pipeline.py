@@ -1,5 +1,3 @@
-# Digest Automation Pipeline (Readwise Reader → GPT → Buttondown)
-
 import requests
 import datetime
 import hashlib
@@ -13,6 +11,7 @@ BUTTONDOWN_TOKEN = os.getenv("BUTTONDOWN_TOKEN")
 SAFE_MODE = True  # Always true, hardcoded for security
 
 tag_filter = "ohmbudsman"
+num_articles = 5
 
 # --- FUNCTIONS ---
 def fetch_readwise_reader_articles():
@@ -39,39 +38,45 @@ def fetch_readwise_reader_articles():
 
 def summarize_articles(articles):
     today = datetime.date.today().strftime("%Y-%m-%d")
+    chunks = [articles[i:i+num_articles] for i in range(0, len(articles), num_articles)]
     summaries = [f"# The Rundown – {today}\n"]
-    prompt = (
-        "For each of the following articles, create a digest summary using Disguised-SNAP format. Structure each as follows:\n"
-        "🧠 HEADLINE\n"
-        "— NUTSHELL\n"
-        "📍 DATELINE / ACTORS\n"
-        "🟢 IMPACT\n"
-        "📊 DATA\n"
-        "💬 QUOTE\n"
-        "BRIDGE\n"
-        "❓ HOOK\n"
-        "🔚 TAKEAWAY\n"
-        "(Source: URL)\n\n"
-    )
-    for article in articles:
-        title = article['title']
-        source = article.get('source_url', 'Unknown')
-        content = article.get('content') or ''
-        prompt += f"Title: {title}\nSource: {source}\nContent: {content[:1000]}\n\n"
+    for chunk in chunks:
+        prompt = (
+            "For each of the following articles, create a digest summary using the Disguised-SNAP format. "
+            "Structure each as follows:\n"
+            "HEADLINE: [Concise headline]\n"
+            "NUTSHELL: [Brief summary]\n"
+            "DATELINE / ACTORS: [Location and key players]\n"
+            "IMPACT: [Implications of the event]\n"
+            "DATA: [Relevant statistics or data]\n"
+            "QUOTE: [Notable quote, if available]\n"
+            "BRIDGE: [Contextual bridge to broader themes]\n"
+            "HOOK: [Engaging question or angle]\n"
+            "TAKEAWAY: [Final insight or conclusion]\n"
+            "(Source: [URL])\n\n"
+            "Ensure each section is clearly labeled and formatted as shown. Maintain consistency across all articles."
+        )
+        for article in chunk:
+            title = article['title']
+            source = article.get('source_url', 'Unknown')
+            content = article.get('content') or ''
+            prompt += f"Title: {title}\nSource: {source}\nContent: {content[:1000]}\n\n"
 
-    chat_payload = {
-        "model": "gpt-4",
-        "messages": [
-            {"role": "system", "content": "You are a formatting assistant writing geopolitical digest content in Disguised-SNAP format."},
-            {"role": "user", "content": prompt}
-        ]
-    }
-    headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
-    response = requests.post("https://api.openai.com/v1/chat/completions", json=chat_payload, headers=headers)
-    response.raise_for_status()
-    summaries.append(response.json()['choices'][0]['message']['content'])
-
+        chat_payload = {
+            "model": "gpt-4",
+            "messages": [
+                {"role": "system", "content": "You are a formatting assistant writing geopolitical digest content in Disguised-SNAP format."},
+                {"role": "user", "content": prompt}
+            ]
+        }
+        headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
+        response = requests.post("https://api.openai.com/v1/chat/completions", json=chat_payload, headers=headers)
+        response.raise_for_status()
+        summaries.append(response.json()['choices'][0]['message']['content'])
     return "\n---\n\n".join(summaries)
+
+def format_digest_markdown(digest_content):
+    return digest_content.replace('\n', '\n\n')
 
 def post_to_buttondown(markdown_text):
     today = datetime.date.today().strftime("%Y-%m-%d")
@@ -88,7 +93,7 @@ sha256: {sha}
 license: CC-BY-NC
 ---
 
-{markdown_text}
+{format_digest_markdown(markdown_text)}
 
 ---
 Licensed under Creative Commons BY-NC 4.0  
