@@ -1,17 +1,21 @@
+import os
 import requests
 import datetime
 import hashlib
-import os
+import time
+import openai
 
 # --- CONFIG ---
 READWISE_TOKEN = os.getenv("READWISE_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 BUTTONDOWN_TOKEN = os.getenv("BUTTONDOWN_TOKEN")
 
+ASSISTANT_ID = "asst_aumVzFe2kUL0u0K0H88owQ1F"
 SAFE_MODE = True  # Always true, hardcoded for security
+TAG_FILTER = "ohmbudsman"
+NUM_ARTICLES = 5
 
-tag_filter = "ohmbudsman"
-num_articles = 5
+openai.api_key = OPENAI_API_KEY
 
 # --- FUNCTIONS ---
 def fetch_readwise_reader_articles():
@@ -27,7 +31,7 @@ def fetch_readwise_reader_articles():
     filtered = []
     for item in items:
         tags = item.get("tags", {})
-        if tag_filter not in tags:
+        if TAG_FILTER not in tags:
             continue
         created_time = datetime.datetime.fromisoformat(item["created_at"].replace("Z", "+00:00"))
         content = item.get("content") or ''
@@ -36,25 +40,25 @@ def fetch_readwise_reader_articles():
 
     return filtered
 
-def summarize_articles(articles):
+def summarize_articles_with_assistant(articles):
     today = datetime.date.today().strftime("%Y-%m-%d")
-    chunks = [articles[i:i+num_articles] for i in range(0, len(articles), num_articles)]
     summaries = [f"# The Rundown – {today}\n"]
-    for chunk in chunks:
+
+    for i in range(0, len(articles), NUM_ARTICLES):
+        chunk = articles[i:i+NUM_ARTICLES]
         prompt = (
-            "For each of the following articles, create a digest summary using the Disguised-SNAP format. "
+            "For each of the following articles, create a digest summary using Disguised-SNAP format. "
             "Structure each as follows:\n"
-            "HEADLINE: [Concise headline]\n"
-            "NUTSHELL: [Brief summary]\n"
-            "DATELINE / ACTORS: [Location and key players]\n"
-            "IMPACT: [Implications of the event]\n"
-            "DATA: [Relevant statistics or data]\n"
-            "QUOTE: [Notable quote, if available]\n"
-            "BRIDGE: [Contextual bridge to broader themes]\n"
-            "HOOK: [Engaging question or angle]\n"
-            "TAKEAWAY: [Final insight or conclusion]\n"
-            "(Source: [URL])\n\n"
-            "Ensure each section is clearly labeled and formatted as shown. Maintain consistency across all articles."
+            "1. 🧠 **HEADLINE**\n"
+            "2. — NUTSHELL\n"
+            "3. 📍 DATELINE / ACTORS\n"
+            "4. 🟢 IMPACT\n"
+            "5. 📊 DATA\n"
+            "6. 💬 QUOTE\n"
+            "7. *BRIDGE*\n"
+            "8. ❓ HOOK\n"
+            "9. 🔚 TAKEAWAY\n"
+            "10. (Source: URL)\n\n"
         )
         for article in chunk:
             title = article['title']
@@ -62,21 +66,39 @@ def summarize_articles(articles):
             content = article.get('content') or ''
             prompt += f"Title: {title}\nSource: {source}\nContent: {content[:1000]}\n\n"
 
-        chat_payload = {
-            "model": "gpt-4",
-            "messages": [
-                {"role": "system", "content": "You are a formatting assistant writing geopolitical digest content in Disguised-SNAP format."},
-                {"role": "user", "content": prompt}
-            ]
-        }
-        headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
-        response = requests.post("https://api.openai.com/v1/chat/completions", json=chat_payload, headers=headers)
-        response.raise_for_status()
-        summaries.append(response.json()['choices'][0]['message']['content'])
-    return "\n---\n\n".join(summaries)
+        # Create a new thread
+        thread = openai.beta.threads.create()
 
-def format_digest_markdown(digest_content):
-    return digest_content.replace('\n', '\n\n')
+        # Add the user's message to the thread
+        openai.beta.threads.messages.create(
+            thread_id=thread.id,
+            role="user",
+            content=prompt
+        )
+
+        # Run the assistant
+        run = openai.beta.threads.runs.create(
+            thread_id=thread.id,
+            assistant_id=ASSISTANT_ID
+        )
+
+        # Poll for completion
+        while True:
+            run_status = openai.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
+            if run_status.status == "completed":
+                break
+            elif run_status.status in ["failed", "cancelled", "expired"]:
+                raise Exception(f"Run failed with status: {run_status.status}")
+            time.sleep(2)
+
+        # Retrieve messages
+        messages = openai.beta.threads.messages.list(thread_id=thread.id)
+        for message in reversed(messages.data):
+            if message.role == "assistant":
+                summaries.append(message.content[0].text.value.strip())
+                break
+
+    return "\n---\n\n".join(summaries)
 
 def post_to_buttondown(markdown_text):
     today = datetime.date.today().strftime("%Y-%m-%d")
@@ -93,7 +115,7 @@ sha256: {sha}
 license: CC-BY-NC
 ---
 
-{format_digest_markdown(markdown_text)}
+{markdown_text}
 
 ---
 Licensed under Creative Commons BY-NC 4.0  
@@ -103,7 +125,7 @@ https://creativecommons.org/licenses/by-nc/4.0/
     payload = {
         "subject": title,
         "body": content,
-        "status": "draft"
+        "status": "draft"  # Explicitly set as draft
     }
     print("SAFE MODE ENABLED: Posting as draft only.")
     res = requests.post("https://api.buttondown.email/v1/emails", headers=headers, json=payload)
@@ -119,8 +141,8 @@ if __name__ == "__main__":
         if not articles:
             print("No tagged articles found in the past 24 hours.")
         else:
-            print("Summarizing via GPT...")
-            digest = summarize_articles(articles)
+            print("Summarizing via OpenAI Assistant...")
+            digest = summarize_articles_with_assistant(articles)
             print("Posting draft to Buttondown...")
             result = post_to_buttondown(digest)
             print("Success:", result['id'])
