@@ -24,54 +24,63 @@ def load_prompts():
     example = (PROMPTS_DIR / "one_shot_example.md").read_text()
     return system, example
 
-def call_openai(system_prompt, example, articles_json):
+def call_openai(system_prompt, example, articles_path):
     openai.api_key = OPENAI_API_KEY
-    with open(articles_json) as f:
+    with open(articles_path) as f:
         arts = json.load(f)
     messages = [
-        {"role":"system", "content": system_prompt},
-        {"role":"user",   "content": example},
-        {"role":"user",   "content": f"Generate digest for these articles:\n{json.dumps(arts, indent=2)}"}
+        {"role": "system", "content": system_prompt},
+        {"role": "user",   "content": example},
+        {
+            "role": "user",
+            "content": (
+                "Generate digest for these articles:\n"
+                f"{json.dumps(arts, indent=2)}"
+            ),
+        },
     ]
     resp = openai.ChatCompletion.create(
         model="gpt-4o-mini",
         messages=messages,
-        temperature=0.3
+        temperature=0.3,
     )
     return resp.choices[0].message.content
 
 def lint_snap(md_text):
-    # 9 headings
+    # 1) Exactly 9 top-level headings
     if len(re.findall(r"^#\s+", md_text, flags=re.MULTILINE)) != 9:
         raise ValueError("Digest must contain exactly 9 top-level headings")
-    # one emoji per bullet
-    for b in re.findall(r"^- .+", md_text, flags=re.MULTILINE):
-        if len(re.findall(r"[\U0001F300-\U0001FAFF]", b)) != 1:
-            raise ValueError(f"Bullet '{b}' must have exactly one emoji")
-    # ≤15 words per sentence
+
+    # 2) Bullets: one emoji & ≤15 words
+    for bullet in re.findall(r"^- .+", md_text, flags=re.MULTILINE):
+        if len(re.findall(r"[\U0001F300-\U0001FAFF]", bullet)) != 1:
+            raise ValueError(f"Bullet '{bullet}' must have exactly one emoji")
+        if len(bullet.split()) > 15:
+            raise ValueError(f"Bullet '{bullet}' exceeds 15 words")
+
+    # 3) Sentences ≤15 words
     for sentence in re.split(r"[.?!]", md_text):
         if len(sentence.split()) > 15:
             raise ValueError("A sentence exceeds 15 words")
 
 def md_to_pdf():
-    # Use Pandoc to convert Markdown → PDF
+    # Convert Markdown to PDF via Pandoc
     subprocess.run(
         ["pandoc", str(MD_OUT), "-o", str(PDF_OUT)],
         check=True
     )
 
 def main():
-    # 1) Generate Markdown via OpenAI
+    # Generate Markdown via OpenAI
     system, example = load_prompts()
     md = call_openai(system, example, ARTICLES)
 
-    # 2) Write and lint
+    # Write out, lint, then produce PDF
     MD_OUT.parent.mkdir(parents=True, exist_ok=True)
     MD_OUT.write_text(md)
     lint_snap(md)
-
-    # 3) Render PDF
     md_to_pdf()
+
     print(f"Generated PDF at {PDF_OUT}")
 
 if __name__ == "__main__":
