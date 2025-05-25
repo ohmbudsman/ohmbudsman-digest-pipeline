@@ -1,3 +1,5 @@
+# Digest Automation Pipeline with Assistant API and Content Validation
+
 import requests
 import datetime
 import hashlib
@@ -10,9 +12,9 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 BUTTONDOWN_TOKEN = os.getenv("BUTTONDOWN_TOKEN")
 ASSISTANT_ID = "asst_aumVzFe2kUL0u0K0H88owQ1F"
 
-SAFE_MODE = True  # Always true, hardcoded for safety
+SAFE_MODE = True
 TAG_FILTER = "ohmbudsman"
-BATCH_SIZE = 3
+NUM_ARTICLES = 5
 
 # --- FUNCTIONS ---
 def fetch_readwise_reader_articles():
@@ -31,60 +33,53 @@ def fetch_readwise_reader_articles():
         if TAG_FILTER not in tags:
             continue
         created_time = datetime.datetime.fromisoformat(item["created_at"].replace("Z", "+00:00"))
-        if created_time >= past_24:
-            filtered.append(item)
+        content = item.get("content") or ''
+        if created_time >= past_24 and len(content.strip()) > 200:
+            filtered.append({
+                "title": item.get("title", "Untitled"),
+                "source_url": item.get("source_url", ""),
+                "content": content
+            })
     return filtered
 
 def summarize_articles_with_assistant(articles):
+    from openai import OpenAI
     openai.api_key = OPENAI_API_KEY
+
     today = datetime.date.today().strftime("%Y-%m-%d")
+    headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
     summaries = [f"# The Rundown – {today}\n"]
 
-    for i in range(0, len(articles), BATCH_SIZE):
-        chunk = articles[i:i+BATCH_SIZE]
-        messages = [
-            {"role": "system", "content": "You are a digest writer using Disguised-SNAP format. Output must strictly follow structure and include all required components."}
-        ]
-
-        for article in chunk:
-            title = article.get("title", "No Title")
-            url = article.get("source_url", "No URL")
-            content = article.get("content") or ""
-            if not content:
-                summaries.append(f"CANNOT ACCESS: {url}. Provide full text or alternate source.\n")
-                continue
-            excerpt = content[:2000]  # Limit to safe size
-            messages.append({
-                "role": "user",
-                "content": f"Title: {title}\nSource: {url}\nContent: {excerpt}"
-            })
-
-        if len(messages) <= 1:
-            continue
-
-        thread = openai.beta.threads.create(messages=messages)
-        run = openai.beta.threads.runs.create(
-            thread_id=thread.id,
-            assistant_id=ASSISTANT_ID,
-            instructions="Format summaries in Disguised-SNAP, markdown output only, no commentary."
+    for article in articles:
+        prompt = (
+            "Please summarize the following article in Disguised-SNAP format:\n"
+            f"Title: {article['title']}\n"
+            f"Source: {article['source_url']}\n"
+            f"Content: {article['content']}\n"
         )
-        run = openai.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
-        while run.status not in ("completed", "failed"):
+
+        thread = openai.beta.threads.create()
+        openai.beta.threads.messages.create(thread_id=thread.id, role="user", content=prompt)
+        run = openai.beta.threads.runs.create(thread_id=thread.id, assistant_id=ASSISTANT_ID)
+
+        # Wait for run completion
+        while True:
             run = openai.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
-        if run.status == "completed":
-            messages = openai.beta.threads.messages.list(thread_id=thread.id)
-            response_text = messages.data[0].content[0].text.value
-            summaries.append(response_text)
-        else:
-            summaries.append("GPT ASSISTANT RUN FAILED\n")
+            if run.status == "completed":
+                break
+
+        messages = openai.beta.threads.messages.list(thread_id=thread.id)
+        response = messages.data[0].content[0].text.value.strip()
+        summaries.append(response)
 
     return "\n---\n\n".join(summaries)
 
 def post_to_buttondown(markdown_text):
     today = datetime.date.today().strftime("%Y-%m-%d")
-    md_bytes = markdown_text.encode('utf-8')
+    md_bytes = markdown_text.encode("utf-8")
     sha = hashlib.sha256(md_bytes).hexdigest()
     title = f"Ohmbudsman Digest – {today}"
+
     content = f"""---
 title: {title}
 author: Justin Waldrop
@@ -119,9 +114,9 @@ if __name__ == "__main__":
         articles = fetch_readwise_reader_articles()
         print(f"Fetched {len(articles)} articles.")
         if not articles:
-            print("No tagged articles found in the past 24 hours.")
+            print("No tagged articles with sufficient content found in the past 24 hours.")
         else:
-            print("Summarizing via GPT Assistant...")
+            print("Summarizing via OpenAI Assistant...")
             digest = summarize_articles_with_assistant(articles)
             print("Posting draft to Buttondown...")
             result = post_to_buttondown(digest)
