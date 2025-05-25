@@ -1,21 +1,18 @@
-import os
 import requests
 import datetime
 import hashlib
-import time
+import os
 import openai
 
 # --- CONFIG ---
 READWISE_TOKEN = os.getenv("READWISE_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 BUTTONDOWN_TOKEN = os.getenv("BUTTONDOWN_TOKEN")
-
 ASSISTANT_ID = "asst_aumVzFe2kUL0u0K0H88owQ1F"
-SAFE_MODE = True  # Always true, hardcoded for security
-TAG_FILTER = "ohmbudsman"
-NUM_ARTICLES = 5
 
-openai.api_key = OPENAI_API_KEY
+SAFE_MODE = True  # Always true, hardcoded for safety
+TAG_FILTER = "ohmbudsman"
+BATCH_SIZE = 3
 
 # --- FUNCTIONS ---
 def fetch_readwise_reader_articles():
@@ -34,69 +31,52 @@ def fetch_readwise_reader_articles():
         if TAG_FILTER not in tags:
             continue
         created_time = datetime.datetime.fromisoformat(item["created_at"].replace("Z", "+00:00"))
-        content = item.get("content") or ''
         if created_time >= past_24:
             filtered.append(item)
-
     return filtered
 
 def summarize_articles_with_assistant(articles):
+    openai.api_key = OPENAI_API_KEY
     today = datetime.date.today().strftime("%Y-%m-%d")
     summaries = [f"# The Rundown – {today}\n"]
 
-    for i in range(0, len(articles), NUM_ARTICLES):
-        chunk = articles[i:i+NUM_ARTICLES]
-        prompt = (
-            "For each of the following articles, create a digest summary using Disguised-SNAP format. "
-            "Structure each as follows:\n"
-            "1. 🧠 **HEADLINE**\n"
-            "2. — NUTSHELL\n"
-            "3. 📍 DATELINE / ACTORS\n"
-            "4. 🟢 IMPACT\n"
-            "5. 📊 DATA\n"
-            "6. 💬 QUOTE\n"
-            "7. *BRIDGE*\n"
-            "8. ❓ HOOK\n"
-            "9. 🔚 TAKEAWAY\n"
-            "10. (Source: URL)\n\n"
-        )
+    for i in range(0, len(articles), BATCH_SIZE):
+        chunk = articles[i:i+BATCH_SIZE]
+        messages = [
+            {"role": "system", "content": "You are a digest writer using Disguised-SNAP format. Output must strictly follow structure and include all required components."}
+        ]
+
         for article in chunk:
-            title = article['title']
-            source = article.get('source_url', 'Unknown')
-            content = article.get('content') or ''
-            prompt += f"Title: {title}\nSource: {source}\nContent: {content[:1000]}\n\n"
+            title = article.get("title", "No Title")
+            url = article.get("source_url", "No URL")
+            content = article.get("content") or ""
+            if not content:
+                summaries.append(f"CANNOT ACCESS: {url}. Provide full text or alternate source.\n")
+                continue
+            excerpt = content[:2000]  # Limit to safe size
+            messages.append({
+                "role": "user",
+                "content": f"Title: {title}\nSource: {url}\nContent: {excerpt}"
+            })
 
-        # Create a new thread
-        thread = openai.beta.threads.create()
+        if len(messages) <= 1:
+            continue
 
-        # Add the user's message to the thread
-        openai.beta.threads.messages.create(
-            thread_id=thread.id,
-            role="user",
-            content=prompt
-        )
-
-        # Run the assistant
+        thread = openai.beta.threads.create(messages=messages)
         run = openai.beta.threads.runs.create(
             thread_id=thread.id,
-            assistant_id=ASSISTANT_ID
+            assistant_id=ASSISTANT_ID,
+            instructions="Format summaries in Disguised-SNAP, markdown output only, no commentary."
         )
-
-        # Poll for completion
-        while True:
-            run_status = openai.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
-            if run_status.status == "completed":
-                break
-            elif run_status.status in ["failed", "cancelled", "expired"]:
-                raise Exception(f"Run failed with status: {run_status.status}")
-            time.sleep(2)
-
-        # Retrieve messages
-        messages = openai.beta.threads.messages.list(thread_id=thread.id)
-        for message in reversed(messages.data):
-            if message.role == "assistant":
-                summaries.append(message.content[0].text.value.strip())
-                break
+        run = openai.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
+        while run.status not in ("completed", "failed"):
+            run = openai.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
+        if run.status == "completed":
+            messages = openai.beta.threads.messages.list(thread_id=thread.id)
+            response_text = messages.data[0].content[0].text.value
+            summaries.append(response_text)
+        else:
+            summaries.append("GPT ASSISTANT RUN FAILED\n")
 
     return "\n---\n\n".join(summaries)
 
@@ -125,7 +105,7 @@ https://creativecommons.org/licenses/by-nc/4.0/
     payload = {
         "subject": title,
         "body": content,
-        "status": "draft"  # Explicitly set as draft
+        "status": "draft"
     }
     print("SAFE MODE ENABLED: Posting as draft only.")
     res = requests.post("https://api.buttondown.email/v1/emails", headers=headers, json=payload)
@@ -141,7 +121,7 @@ if __name__ == "__main__":
         if not articles:
             print("No tagged articles found in the past 24 hours.")
         else:
-            print("Summarizing via OpenAI Assistant...")
+            print("Summarizing via GPT Assistant...")
             digest = summarize_articles_with_assistant(articles)
             print("Posting draft to Buttondown...")
             result = post_to_buttondown(digest)
