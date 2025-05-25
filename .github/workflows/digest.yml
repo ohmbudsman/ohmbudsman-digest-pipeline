@@ -12,21 +12,28 @@ jobs:
   ingest:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-python@v5
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install system deps
+
+      - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y pandoc fonts-noto
-      - name: Install Poetry & deps
+
+      - name: Install Poetry & Python deps
         run: |
           pip install poetry
           poetry install --no-root
-      - uses: actions/checkout@v4
+
       - name: Fetch & Summarise
         run: poetry run python src/fetch_summaries.py
-      - name: Upload articles
+
+      - name: Upload raw articles
         uses: actions/upload-artifact@v4
         with:
           name: articles-json
@@ -35,25 +42,33 @@ jobs:
   render:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-python@v5
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install system deps
+
+      - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y pandoc fonts-noto
-      - name: Install Poetry & deps
+
+      - name: Install Poetry & Python deps
         run: |
           pip install poetry
           poetry install --no-root
-      - uses: actions/checkout@v4
-      - name: Download articles
+
+      - name: Download raw articles
         uses: actions/download-artifact@v4
         with:
           name: articles-json
+
       - name: Render Digest to PDF
         run: poetry run python src/render_pdf.py
-      - name: Upload digest artifacts
+
+      - name: Upload PDF digest
         uses: actions/upload-artifact@v4
         with:
           name: digest
@@ -62,22 +77,29 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-python@v5
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install system deps
+
+      - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y pandoc fonts-noto
-      - name: Install Poetry & deps
+
+      - name: Install Poetry & Python deps
         run: |
           pip install poetry
           poetry install --no-root
-      - uses: actions/checkout@v4
-      - name: Download Digest
+
+      - name: Download PDF digest
         uses: actions/download-artifact@v4
         with:
           name: digest
+
       - name: Send Digest via Buttondown
         env:
           BUTTONDOWN_TOKEN: ${{ secrets.BUTTONDOWN_TOKEN }}
