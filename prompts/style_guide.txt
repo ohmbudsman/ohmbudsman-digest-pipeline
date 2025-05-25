@@ -1,39 +1,37 @@
-# prompts/style_guide.txt
-
 Follow the Disguised-SNAP Style Guide exactly:
 
-1. Document Structure  
-   - Use **exactly 9** top-level Markdown headings (`# Section N: Title`).  
-   - Section titles: 2–6 words, capitalized like a headline.  
+1. Document Structure
+   - Use exactly 9 top-level Markdown headings (`# Section N: Title`).
+   - Section titles: 2–6 words, Title Case.
    - Separate each section with a single blank line.
 
-2. Sentences  
-   - **≤ 15 words** per sentence.  
-   - One sentence per line.  
+2. Sentences
+   - ≤ 15 words per sentence.
+   - One sentence per line.
    - No subordinate or run-on clauses.
 
-3. Bulleted Lists  
-   - Use `- ` for bullets.  
-   - **Exactly one emoji** at the start of each bullet.  
-   - Bullet text: ≤ 15 words.  
-   - No more than **3 bullets** per section.
+3. Bulleted Lists
+   - Use `- ` for bullets.
+   - Exactly one emoji at the start of each bullet.
+   - Bullet text ≤ 15 words.
+   - No more than 3 bullets per section.
 
-4. URLs  
-   - **One URL** per section.  
-   - Embed as `[anchor text](https://…)`.  
-   - Place the link in a bullet if you need context.
+4. URLs
+   - One URL per section.
+   - Embed as `[anchor text](https://…)`.
+   - Place links in bullets for context.
 
-5. Tone & Style  
-   - Neutral, factual, forward-looking.  
-   - Use analogies/metaphors sparingly to clarify.  
-   - Avoid jargon; define any technical term.
+5. Tone & Style
+   - Neutral, factual, forward-looking.
+   - Use analogies/metaphors sparingly.
+   - Avoid jargon; define technical terms.
 
-6. Metadata  
-   - Title (outside this prompt) must be:  
-     `Ohmbudsman Digest – YYYY-MM-DD`  
-   - Author line (outside this prompt):  
+6. Metadata
+   - Title (generated externally):  
+     `Ohmbudsman Digest – YYYY-MM-DD`
+   - Author line (generated externally):  
      `author: Justin`
 
-7. Formatting  
-   - No tables, code blocks, or images in the Markdown.  
-   - Blank line between list items and headings.  
+7. Formatting
+   - No tables, code blocks, or images in Markdown.
+   - Blank line between headings and lists.
