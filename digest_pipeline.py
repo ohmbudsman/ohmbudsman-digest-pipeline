@@ -1,9 +1,8 @@
-# Digest Automation Pipeline with Assistant API and Content Validation
-
-import requests
-import datetime
-import hashlib
 import os
+import time
+import hashlib
+import datetime
+import requests
 import openai
 
 # --- CONFIG ---
@@ -11,12 +10,12 @@ READWISE_TOKEN = os.getenv("READWISE_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 BUTTONDOWN_TOKEN = os.getenv("BUTTONDOWN_TOKEN")
 ASSISTANT_ID = "asst_aumVzFe2kUL0u0K0H88owQ1F"
-
-SAFE_MODE = True
+SAFE_MODE = True  # Always true, hardcoded for security
 TAG_FILTER = "ohmbudsman"
 NUM_ARTICLES = 5
 
-# --- FUNCTIONS ---
+openai.api_key = OPENAI_API_KEY
+
 def fetch_readwise_reader_articles():
     url = "https://readwise.io/api/v3/list/"
     headers = {"Authorization": f"Token {READWISE_TOKEN}"}
@@ -34,52 +33,63 @@ def fetch_readwise_reader_articles():
             continue
         created_time = datetime.datetime.fromisoformat(item["created_at"].replace("Z", "+00:00"))
         content = item.get("content") or ''
-        if created_time >= past_24 and len(content.strip()) > 200:
-            filtered.append({
-                "title": item.get("title", "Untitled"),
-                "source_url": item.get("source_url", ""),
-                "content": content
-            })
+        if created_time >= past_24:
+            filtered.append(item)
+
     return filtered
 
 def summarize_articles_with_assistant(articles):
-    from openai import OpenAI
-    openai.api_key = OPENAI_API_KEY
-
     today = datetime.date.today().strftime("%Y-%m-%d")
-    headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
     summaries = [f"# The Rundown – {today}\n"]
-
     for article in articles:
+        title = article['title']
+        source = article.get('source_url', 'Unknown')
+        content = article.get('content') or ''
         prompt = (
-            "Please summarize the following article in Disguised-SNAP format:\n"
-            f"Title: {article['title']}\n"
-            f"Source: {article['source_url']}\n"
-            f"Content: {article['content']}\n"
+            f"Title: {title}\n"
+            f"Source: {source}\n"
+            f"Content: {content[:1000]}\n\n"
+            "Please summarize the above article using the Disguised-SNAP format."
         )
 
+        # Create a new thread
         thread = openai.beta.threads.create()
-        openai.beta.threads.messages.create(thread_id=thread.id, role="user", content=prompt)
-        run = openai.beta.threads.runs.create(thread_id=thread.id, assistant_id=ASSISTANT_ID)
 
-        # Wait for run completion
+        # Add a message to the thread
+        openai.beta.threads.messages.create(
+            thread_id=thread.id,
+            role="user",
+            content=prompt
+        )
+
+        # Run the assistant on the thread
+        run = openai.beta.threads.runs.create(
+            thread_id=thread.id,
+            assistant_id=ASSISTANT_ID
+        )
+
+        # Wait for the run to complete
         while True:
-            run = openai.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
-            if run.status == "completed":
+            run_status = openai.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
+            if run_status.status == 'completed':
                 break
+            time.sleep(1)
 
+        # Retrieve messages from the thread
         messages = openai.beta.threads.messages.list(thread_id=thread.id)
-        response = messages.data[0].content[0].text.value.strip()
-        summaries.append(response)
+        assistant_messages = [msg for msg in messages.data if msg.role == 'assistant']
+        if assistant_messages:
+            summaries.append(assistant_messages[-1].content[0].text.value)
+        else:
+            summaries.append("No summary available.")
 
     return "\n---\n\n".join(summaries)
 
 def post_to_buttondown(markdown_text):
     today = datetime.date.today().strftime("%Y-%m-%d")
-    md_bytes = markdown_text.encode("utf-8")
+    md_bytes = markdown_text.encode('utf-8')
     sha = hashlib.sha256(md_bytes).hexdigest()
     title = f"Ohmbudsman Digest – {today}"
-
     content = f"""---
 title: {title}
 author: Justin Waldrop
@@ -100,7 +110,7 @@ https://creativecommons.org/licenses/by-nc/4.0/
     payload = {
         "subject": title,
         "body": content,
-        "status": "draft"
+        "status": "draft"  # Explicitly set as draft
     }
     print("SAFE MODE ENABLED: Posting as draft only.")
     res = requests.post("https://api.buttondown.email/v1/emails", headers=headers, json=payload)
@@ -114,7 +124,7 @@ if __name__ == "__main__":
         articles = fetch_readwise_reader_articles()
         print(f"Fetched {len(articles)} articles.")
         if not articles:
-            print("No tagged articles with sufficient content found in the past 24 hours.")
+            print("No tagged articles found in the past 24 hours.")
         else:
             print("Summarizing via OpenAI Assistant...")
             digest = summarize_articles_with_assistant(articles)
