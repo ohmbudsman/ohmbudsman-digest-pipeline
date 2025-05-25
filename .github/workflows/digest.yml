@@ -1,24 +1,69 @@
-name: Run Digest Pipeline
-
+name: Build-and-Send Digest
 on:
-  workflow_dispatch:
   schedule:
-    - cron: '1 2 * * *'  # 2:01 AM UTC = 8:01 PM CST
+    - cron: '05 10 * * *' # 10:05 UTC = 05:05 CDT
+  workflow_dispatch:
+
+env:
+  TZ: America/Chicago
 
 jobs:
-  digest:
+  setup:
     runs-on: ubuntu-latest
-    env:
-      READWISE_TOKEN: ${{ secrets.READWISE_TOKEN }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      BUTTONDOWN_TOKEN: ${{ secrets.BUTTONDOWN_TOKEN }}
     steps:
-      - uses: actions/checkout@v3
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-      - name: Run digest pipeline
-        run: python digest_pipeline.py
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y typst ghostscript fonts-noto pandoc
+      - name: Install Python deps
+        run: |
+          pip install poetry
+          poetry install
+
+  ingest:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch & Summarise
+        run: poetry run python src/fetch_summaries.py
+      - name: Upload articles
+        uses: actions/upload-artifact@v4
+        with:
+          name: articles-json
+          path: output/articles.json
+
+  render:
+    needs: ingest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download articles
+        uses: actions/download-artifact@v4
+        with:
+          name: articles-json
+      - name: Render Digest
+        run: poetry run python src/render_pdf.py
+      - name: Upload digest artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest
+          path: output/
+
+  publish:
+    needs: render
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download Digest
+        uses: actions/download-artifact@v4
+        with:
+          name: digest
+      - name: Send Digest
+        env:
+          BUTTONDOWN_TOKEN: ${{ secrets.BUTTONDOWN_TOKEN }}
+        run: poetry run python src/send_digest.py
