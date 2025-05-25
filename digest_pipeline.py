@@ -22,7 +22,6 @@ def fetch_readwise_reader_articles():
     res.raise_for_status()
     items = res.json().get("results", [])
 
-    # Calculate 24-hour window
     utc_now = datetime.datetime.now(datetime.timezone.utc)
     past_24 = utc_now - datetime.timedelta(hours=24)
 
@@ -45,9 +44,19 @@ def summarize_articles(articles):
     chunks = [articles[i:i+num_articles] for i in range(0, len(articles), num_articles)]
     summaries = [f"# The Rundown – {today}\n"]
     for chunk in chunks:
-        prompt = "Create a geopolitical media digest in Markdown using the following strict format for each article:\n\n"
-        prompt += "🧠 **HEADLINE**\n— A 1-2 sentence summary or insight.\n🔗 [Source](URL)\n\n"
-        prompt += "Articles:\n\n"
+        prompt = (
+            "Summarize each article in Disguised-SNAP format with the following structure:\n"
+            "1. 🧠 **HEADLINE** – ≤11 words, Title Case\n"
+            "2. — NUTSHELL – 1 sentence summary\n"
+            "3. 📍 DATELINE / ACTORS – Location, date, actors\n"
+            "4. 🟢 IMPACT – + bolded verb\n"
+            "5. 📊 DATA – One numerical stat\n"
+            "6. 💬 QUOTE – Short quote + attribution\n"
+            "7. *BRIDGE* – 1 italic sentence linking to broader trend\n"
+            "8. ❓ HOOK – 1 rhetorical question\n"
+            "9. 🔚 TAKEAWAY – ≤12 word bold summary\n"
+            "10. (Source: URL)\n"
+        )
         for article in chunk:
             title = article['title']
             source = article.get('source_url', 'Unknown')
@@ -55,11 +64,11 @@ def summarize_articles(articles):
             if len(content.strip()) < 100:
                 content_note = "(⚠ Short content – summarize accordingly)"
                 content = f"{content_note}\n{content}"
-            prompt += f"Title: {title}\nSource: {source}\nContent: {content[:500]}\n\n"
+            prompt += f"\nTitle: {title}\nSource: {source}\nContent: {content[:1000]}\n"
         chat_payload = {
             "model": "gpt-4",
             "messages": [
-                {"role": "system", "content": "You are a geopolitical media digest assistant."},
+                {"role": "system", "content": "You are a geopolitical digest writer following Disguised-SNAP formatting strictly."},
                 {"role": "user", "content": prompt}
             ]
         }
@@ -91,17 +100,12 @@ Licensed under Creative Commons BY-NC 4.0
 https://creativecommons.org/licenses/by-nc/4.0/
 """
     headers = {"Authorization": f"Token {BUTTONDOWN_TOKEN}"}
-    payload = {"subject": title, "body": content, "draft": True}
-
-    if SAFE_MODE:
-        print("SAFE MODE ENABLED: Posting as draft only.")
-    else:
-        confirm = input("Are you sure you want to send live? (yes/no): ")
-        if confirm.lower() != "yes":
-            print("Live send aborted.")
-            return {"id": "draft-aborted"}
-        payload["draft"] = False
-
+    payload = {
+        "subject": title,
+        "body": content,
+        "draft": True  # hard-coded to always save as draft
+    }
+    print("SAFE MODE ENABLED: Posting as draft only.")
     res = requests.post("https://api.buttondown.email/v1/emails", headers=headers, json=payload)
     res.raise_for_status()
     return res.json()
