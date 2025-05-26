@@ -9,107 +9,98 @@ env:
   TZ: America/Chicago
 
 jobs:
+# ── Ingest ────────────────────────────────────────────────────────────
   ingest:
     runs-on: ubuntu-latest
     env:
       READWISE_TOKEN: ${{ secrets.READWISE_TOKEN }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
 
-      - name: Install system dependencies
+      - name: Sys deps
         run: |
           sudo apt-get update
           sudo apt-get install -y pandoc texlive-latex-base fonts-noto
 
-      - name: Install Poetry & Python deps
+      - name: Python deps
         run: |
           pip install poetry
           poetry install --no-root
 
-      - name: Fetch last-24h Reader articles
+      - name: Fetch Reader articles
         run: poetry run python src/fetch_summaries.py
 
-      - name: Upload raw articles artifact
+      - name: Upload output/ folder
         uses: actions/upload-artifact@v4
         with:
           name: articles-json
-          path: output/articles.json
+          path: output     # <── keeps output/articles.json inside
 
+# ── Render ────────────────────────────────────────────────────────────
   render:
     needs: ingest
     runs-on: ubuntu-latest
     env:
-      READWISE_TOKEN: ${{ secrets.READWISE_TOKEN }}
-      OPENAI_API_KEY:   ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
 
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install system dependencies
+      - name: Sys deps
         run: |
           sudo apt-get update
           sudo apt-get install -y pandoc texlive-latex-base fonts-noto
 
-      - name: Install Poetry & Python deps
+      - name: Python deps
         run: |
           pip install poetry
           poetry install --no-root
 
-      - name: Download raw articles artifact
+      - name: Download output/ folder
         uses: actions/download-artifact@v4
         with:
           name: articles-json
-          path: .    # writes output/articles.json to workspace
+          path: .           # recreates output/articles.json
 
-      - name: Render Digest to PDF
+      - name: Render PDF
         run: poetry run python src/render_pdf.py
 
-      - name: Upload PDF digest artifact
+      - name: Upload output/ folder (PDF inside)
         uses: actions/upload-artifact@v4
         with:
           name: digest
-          path: output/digest.pdf
+          path: output      # includes output/digest.pdf
 
+# ── Publish ───────────────────────────────────────────────────────────
   publish:
     needs: render
     runs-on: ubuntu-latest
     env:
       BUTTONDOWN_TOKEN: ${{ secrets.BUTTONDOWN_TOKEN }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
 
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install system dependencies
+      - name: Sys deps
         run: |
           sudo apt-get update
           sudo apt-get install -y pandoc texlive-latex-base fonts-noto
 
-      - name: Install Poetry & Python deps
+      - name: Python deps
         run: |
           pip install poetry
           poetry install --no-root
 
-      - name: Download PDF digest artifact
+      - name: Download output/ folder (PDF)
         uses: actions/download-artifact@v4
         with:
           name: digest
-          path: .    # writes output/digest.pdf to workspace
+          path: .           # recreates output/digest.pdf
 
-      - name: Send Digest via Buttondown
+      - name: Send Digest
         run: poetry run python src/send_digest.py
