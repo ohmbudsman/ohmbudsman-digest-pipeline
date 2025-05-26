@@ -1,69 +1,106 @@
 name: Build-and-Send Digest
+
 on:
   schedule:
-    - cron: '05 10 * * *' # 10:05 UTC = 05:05 CDT
+    - cron: '05 10 * * *'   # 10:05 UTC = 05:05 CDT
   workflow_dispatch:
 
 env:
   TZ: America/Chicago
 
 jobs:
-  setup:
+  ingest:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install system deps
+
+      - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y typst ghostscript fonts-noto pandoc
-      - name: Install Python deps
+          sudo apt-get install -y pandoc fonts-noto
+
+      - name: Install Poetry & Python deps
         run: |
           pip install poetry
-          poetry install
+          poetry install --no-root
 
-  ingest:
-    needs: setup
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
       - name: Fetch & Summarise
         run: poetry run python src/fetch_summaries.py
-      - name: Upload articles
+
+      - name: Upload raw articles
         uses: actions/upload-artifact@v4
         with:
           name: articles-json
           path: output/articles.json
 
   render:
-    needs: ingest
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Download articles
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pandoc fonts-noto
+
+      - name: Install Poetry & Python deps
+        run: |
+          pip install poetry
+          poetry install --no-root
+
+      - name: Download raw articles
         uses: actions/download-artifact@v4
         with:
           name: articles-json
-      - name: Render Digest
+
+      - name: Render Digest to PDF
         run: poetry run python src/render_pdf.py
-      - name: Upload digest artifacts
+
+      - name: Upload PDF digest
         uses: actions/upload-artifact@v4
         with:
           name: digest
           path: output/
 
   publish:
-    needs: render
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Download Digest
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pandoc fonts-noto
+
+      - name: Install Poetry & Python deps
+        run: |
+          pip install poetry
+          poetry install --no-root
+
+      - name: Download PDF digest
         uses: actions/download-artifact@v4
         with:
           name: digest
-      - name: Send Digest
+
+      - name: Send Digest via Buttondown
         env:
           BUTTONDOWN_TOKEN: ${{ secrets.BUTTONDOWN_TOKEN }}
         run: poetry run python src/send_digest.py
