@@ -1,4 +1,3 @@
-# .github/workflows/digest.yml
 name: Build-and-Send Digest
 
 on:
@@ -133,6 +132,17 @@ jobs:
         with:
           name: digest
           path: .
+
+      - name: Ensure output/digest.pdf exists
+        run: |
+          if [ -f output/digest.pdf ]; then
+            echo "✔ output/digest.pdf in place"
+          elif [ -f digest.pdf ]; then
+            mkdir -p output
+            mv digest.pdf output/digest.pdf
+          else
+            echo "❌ Missing digest.pdf" && exit 1
+          fi
 
       - name: Send Digest via Buttondown
         run: poetry run python src/send_digest.py
