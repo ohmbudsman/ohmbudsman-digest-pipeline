@@ -11,14 +11,11 @@ env:
 jobs:
   ingest:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./ohmbudsman-digest-pipeline
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -44,14 +41,11 @@ jobs:
 
   render:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./ohmbudsman-digest-pipeline
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -82,14 +76,11 @@ jobs:
 
   publish:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./ohmbudsman-digest-pipeline
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
