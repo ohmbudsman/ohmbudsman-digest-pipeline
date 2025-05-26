@@ -1,28 +1,18 @@
 [tool.poetry]
 name = "ohmbudsman-digest"
 version = "1.0.0"
-description = "Automated Daily News Digest for Ohmbudsman Media LLC"
-authors = ["Justin Waldrop <your-email@example.com>"]
-license = "MIT"
+description = "Automated Daily News Digest"
+authors = ["Justin Waldrop <you@example.com>"]
 
 [tool.poetry.dependencies]
 python = "^3.11"
-openai = "1.23.0"
+openai = "0.28.0"
 requests = "2.32.0"
-feedparser = "6.0.11"
-beautifulsoup4 = "4.12.3"
-markdown = "3.5.2"
-emoji = "2.10.0"
 python-dotenv = "1.0.0"
-rich = "12.6.0"
-pydantic = "1.10.7"
-pyyaml = "6.0"
-
-[tool.poetry.group.dev]
-optional = true
+# … your other deps …
 
 [tool.poetry.group.dev.dependencies]
-pytest = "7.3.1"
+pytest = "^7.3.1"
 ruff = "^0.11.11"
 
 [build-system]
