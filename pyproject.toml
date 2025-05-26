@@ -13,7 +13,6 @@ feedparser = "6.0.11"
 beautifulsoup4 = "4.12.3"
 markdown = "3.5.2"
 pandoc = "3.1.9"
-python-buttondown = "0.4.3"
 emoji = "2.10.0"
 python-dotenv = "1.0.0"
 rich = "12.6.0"
@@ -24,7 +23,7 @@ optional = true
 
 [tool.poetry.group.dev.dependencies]
 pytest = "7.3.1"
-ruff = "^0.11.11"  # Lints & formats with the current 0.11.x series  [oai_citation:0‡PyPI](https://pypi.org/project/ruff/?utm_source=chatgpt.com)
+ruff = "^0.11.11"
 
 [build-system]
 requires = ["poetry-core"]
