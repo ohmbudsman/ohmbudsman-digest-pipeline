@@ -1,82 +1,128 @@
-#!/usr/bin/env python3
-import os
-import json
-import re
-import subprocess
-from pathlib import Path
-from dotenv import load_dotenv
-import openai
+name: Build-and-Send Digest
 
-# Load environment
-load_dotenv()
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-if not OPENAI_API_KEY:
-    raise RuntimeError("OPENAI_API_KEY missing")
+on:
+  schedule:
+    - cron: '05 10 * * *'   # runs daily at 05:05 CDT
+  workflow_dispatch:       # allows manual trigger
 
-# Initialize OpenAI client
-openai.api_key = OPENAI_API_KEY
+env:
+  TZ: America/Chicago
 
-# Paths
-ARTICLES_JSON = Path("output/articles.json")
-PROMPTS_DIR = Path("prompts")
-MD_OUT = Path("output/digest.md")
-PDF_OUT = Path("output/digest.pdf")
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    env:
+      READWISE_TOKEN: ${{ secrets.READWISE_TOKEN }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-def load_prompts():
-    system_prompt = (PROMPTS_DIR / "style_guide.txt").read_text()
-    example_prompt = (PROMPTS_DIR / "one_shot_example.md").read_text()
-    return system_prompt, example_prompt
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-def call_openai(system_prompt: str, example_prompt: str, articles_path: Path) -> str:
-    # Prepare messages
-    with open(articles_path) as f:
-        articles = json.load(f)
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user",   "content": example_prompt},
-        {
-            "role": "user",
-            "content": "Generate digest for these articles:\n" +
-                       json.dumps(articles, indent=2)
-        }
-    ]
-    # Use the new v1 Chat Completions interface
-    response = openai.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=messages,
-        temperature=0.3,
-    )
-    return response.choices[0].message.content
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pandoc texlive-latex-base fonts-noto
 
-def lint_snap(md_text: str) -> None:
-    # 1) Exactly 9 top-level headings
-    if len(re.findall(r"^#\s+", md_text, flags=re.MULTILINE)) != 9:
-        raise ValueError("Digest must contain exactly 9 top-level headings")
-    # 2) Bullets: one emoji & ≤15 words
-    for bullet in re.findall(r"^- .+", md_text, flags=re.MULTILINE):
-        if len(re.findall(r"[\U0001F300-\U0001FAFF]", bullet)) != 1:
-            raise ValueError(f"Bullet '{bullet}' must have exactly one emoji")
-        if len(bullet.split()) > 15:
-            raise ValueError(f"Bullet '{bullet}' exceeds 15 words")
-    # 3) Sentences ≤15 words
-    for sentence in re.split(r"[.?!]", md_text):
-        if len(sentence.split()) > 15:
-            raise ValueError("A sentence exceeds 15 words")
+      - name: Install Poetry & Python deps
+        run: |
+          pip install poetry
+          poetry install --no-root
 
-def md_to_pdf():
-    subprocess.run(
-        ["pandoc", str(MD_OUT), "-o", str(PDF_OUT)],
-        check=True
-    )
+      - name: Fetch Reader articles
+        run: poetry run python src/fetch_summaries.py
 
-def main():
-    system_prompt, example_prompt = load_prompts()
-    md_content = call_openai(system_prompt, example_prompt, ARTICLES_JSON)
-    MD_OUT.parent.mkdir(parents=True, exist_ok=True)
-    MD_OUT.write_text(md_content)
-    lint_snap(md_content)
-    md_to_pdf()
-    print(f"Generated PDF at {PDF_OUT}")
+      - name: Upload articles-json artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: articles-json
+          path: output/articles.json
+          if-no-files-found: error
 
-if __name__ == "__main__":
-    main()
+  render:
+    needs: ingest
+    runs-on: ubuntu-latest
+    env:
+      READWISE_TOKEN:   ${{ secrets.READWISE_TOKEN }}
+      OPENAI_API_KEY:   ${{ secrets.OPENAI_API_KEY }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pandoc texlive-latex-base fonts-noto
+
+      - name: Install Poetry & Python deps
+        run: |
+          pip install poetry
+          poetry install --no-root
+
+      - name: Download articles-json artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: articles-json
+          path: .      # will drop articles.json into workspace root
+
+      - name: Ensure output/articles.json exists
+        run: |
+          if [ -f output/articles.json ]; then
+            echo "✔ output/articles.json in place"
+          elif [ -f articles.json ]; then
+            mkdir -p output
+            mv articles.json output/articles.json
+          else
+            echo "❌ Missing articles.json" && exit 1
+          fi
+
+      - name: Render Digest PDF
+        run: poetry run python src/render_pdf.py
+
+      - name: Upload digest artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest
+          path: output/digest.pdf
+          if-no-files-found: error
+
+  publish:
+    needs: render
+    runs-on: ubuntu-latest
+    env:
+      BUTTONDOWN_TOKEN: ${{ secrets.BUTTONDOWN_TOKEN }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pandoc texlive-latex-base fonts-noto
+
+      - name: Install Poetry & Python deps
+        run: |
+          pip install poetry
+          poetry install --no-root
+
+      - name: Download digest artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: digest
+          path: .     # recreates output/digest.pdf
+
+      - name: Send Digest via Buttondown
+        run: poetry run python src/send_digest.py
