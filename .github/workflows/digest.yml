@@ -14,17 +14,20 @@ jobs:
     env:
       READWISE_TOKEN: ${{ secrets.READWISE_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with: { python-version: '3.11' }
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-      - name: Install system deps
+      - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y pandoc texlive-latex-base fonts-noto
 
-      - name: Install Poetry deps
+      - name: Install Poetry & Python deps
         run: |
           pip install poetry
           poetry install --no-root
@@ -32,50 +35,78 @@ jobs:
       - name: Fetch last-24h Reader articles
         run: poetry run python src/fetch_summaries.py
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload raw articles artifact
+        uses: actions/upload-artifact@v4
         with:
           name: articles-json
           path: output/articles.json
 
   render:
+    needs: ingest
     runs-on: ubuntu-latest
     env:
       READWISE_TOKEN: ${{ secrets.READWISE_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: '3.11' }
-      - run: |
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install system dependencies
+        run: |
           sudo apt-get update
           sudo apt-get install -y pandoc texlive-latex-base fonts-noto
-      - run: |
+
+      - name: Install Poetry & Python deps
+        run: |
           pip install poetry
           poetry install --no-root
-      - uses: actions/download-artifact@v4
-        with: { name: articles-json }
+
+      - name: Download raw articles artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: articles-json
+
       - name: Render Digest PDF
         run: poetry run python src/render_pdf.py
-      - uses: actions/upload-artifact@v4
+
+      - name: Upload PDF digest artifact
+        uses: actions/upload-artifact@v4
         with:
           name: digest
-          path: output/
+          path: output/digest.pdf
 
   publish:
+    needs: render
     runs-on: ubuntu-latest
     env:
-      READWISE_TOKEN: ${{ secrets.READWISE_TOKEN }}
       BUTTONDOWN_TOKEN: ${{ secrets.BUTTONDOWN_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: '3.11' }
-      - run: |
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install system dependencies
+        run: |
           sudo apt-get update
           sudo apt-get install -y pandoc texlive-latex-base fonts-noto
-      - run: |
+
+      - name: Install Poetry & Python deps
+        run: |
           pip install poetry
           poetry install --no-root
-      - uses: actions/download-artifact@v4
-        with: { name: digest }
-      - name: Send digest via Buttondown
+
+      - name: Download PDF digest artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: digest
+
+      - name: Send Digest via Buttondown
         run: poetry run python src/send_digest.py
