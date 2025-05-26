@@ -9,22 +9,22 @@ env:
   TZ: America/Chicago
 
 jobs:
-# ── Ingest ────────────────────────────────────────────────────────────
   ingest:
     runs-on: ubuntu-latest
     env:
       READWISE_TOKEN: ${{ secrets.READWISE_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with: { python-version: '3.11' }
 
-      - name: Sys deps
+      - name: Install system deps
         run: |
           sudo apt-get update
           sudo apt-get install -y pandoc texlive-latex-base fonts-noto
 
-      - name: Python deps
+      - name: Install Poetry & deps
         run: |
           pip install poetry
           poetry install --no-root
@@ -32,53 +32,62 @@ jobs:
       - name: Fetch Reader articles
         run: poetry run python src/fetch_summaries.py
 
-      # Upload the file with its relative path preserved
-      - name: Upload articles-json
+      - name: Upload articles-json artifact
         uses: actions/upload-artifact@v4
         with:
           name: articles-json
           path: output/articles.json
           if-no-files-found: error
 
-# ── Render ────────────────────────────────────────────────────────────
   render:
     needs: ingest
     runs-on: ubuntu-latest
     env:
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      READWISE_TOKEN:   ${{ secrets.READWISE_TOKEN }}
+      OPENAI_API_KEY:   ${{ secrets.OPENAI_API_KEY }}
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with: { python-version: '3.11' }
 
-      - name: Sys deps
+      - name: Install system deps
         run: |
           sudo apt-get update
           sudo apt-get install -y pandoc texlive-latex-base fonts-noto
 
-      - name: Python deps
+      - name: Install Poetry & deps
         run: |
           pip install poetry
           poetry install --no-root
 
-      # Download to workspace root; creates ./output/articles.json
-      - name: Download articles-json
+      - name: Download articles-json artifact
         uses: actions/download-artifact@v4
         with:
           name: articles-json
           path: .
 
-      - name: Render PDF
+      - name: Ensure output/articles.json exists
+        run: |
+          if [ -f output/articles.json ]; then
+            echo "✔ output/articles.json is in place"
+          elif [ -f articles.json ]; then
+            mkdir -p output
+            mv articles.json output/articles.json
+          else
+            echo "❌ Missing articles.json after download" && exit 1
+          fi
+
+      - name: Render Digest PDF
         run: poetry run python src/render_pdf.py
 
-      - name: Upload digest
+      - name: Upload digest artifact
         uses: actions/upload-artifact@v4
         with:
           name: digest
           path: output/digest.pdf
           if-no-files-found: error
 
-# ── Publish ───────────────────────────────────────────────────────────
   publish:
     needs: render
     runs-on: ubuntu-latest
@@ -86,24 +95,25 @@ jobs:
       BUTTONDOWN_TOKEN: ${{ secrets.BUTTONDOWN_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with: { python-version: '3.11' }
 
-      - name: Sys deps
+      - name: Install system deps
         run: |
           sudo apt-get update
           sudo apt-get install -y pandoc texlive-latex-base fonts-noto
 
-      - name: Python deps
+      - name: Install Poetry & deps
         run: |
           pip install poetry
           poetry install --no-root
 
-      - name: Download digest
+      - name: Download digest artifact
         uses: actions/download-artifact@v4
         with:
           name: digest
           path: .
 
-      - name: Send Digest
+      - name: Send Digest via Buttondown
         run: poetry run python src/send_digest.py
