@@ -1,7 +1,8 @@
+# src/render_pdf.py
 #!/usr/bin/env python3
 """
 Render the digest by calling OpenAI’s legacy ChatCompletion.create,
-then convert it to PDF via Pandoc.
+then convert it to PDF via Pandoc (using XeLaTeX for full Unicode support).
 """
 
 import os
@@ -12,7 +13,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 import openai
 
-# ─── Env Setup ─────────────────────────────────────────────────────────
+# ─── Environment Setup ─────────────────────────────────────────────────
 load_dotenv()
 API_KEY = os.getenv("OPENAI_API_KEY")
 if not API_KEY:
@@ -39,7 +40,8 @@ def call_openai(system: str, example: str, articles_path: Path) -> str:
         {"role": "user",   "content": example},
         {
             "role":    "user",
-            "content": "Generate digest for these articles:\n" + json.dumps(articles, indent=2),
+            "content": "Generate digest for these articles:\n"
+                       + json.dumps(articles, indent=2),
         },
     ]
     resp = openai.ChatCompletion.create(
@@ -70,8 +72,14 @@ def lint_markdown(md: str) -> None:
 # ─── Convert to PDF ─────────────────────────────────────────────────────
 def md_to_pdf() -> None:
     subprocess.run(
-        ["pandoc", str(MD_OUT), "-o", str(PDF_OUT)],
-        check=True,
+        [
+            "pandoc",
+            str(MD_OUT),
+            "--pdf-engine=xelatex",
+            "-o",
+            str(PDF_OUT)
+        ],
+        check=True
     )
 
 # ─── Main Flow ─────────────────────────────────────────────────────────
