@@ -1,4 +1,4 @@
- name: Build-and-Send Digest
+name: Build-and-Send Digest
 
 on:
   schedule:
