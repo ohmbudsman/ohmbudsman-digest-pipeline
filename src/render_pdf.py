@@ -39,8 +39,7 @@ def call_openai(system: str, example: str, articles_path: Path) -> str:
         {"role": "user",   "content": example},
         {
             "role":    "user",
-            "content": "Generate digest for these articles:\n"
-                       + json.dumps(articles, indent=2),
+            "content": "Generate digest for these articles:\n" + json.dumps(articles, indent=2),
         },
     ]
     resp = openai.ChatCompletion.create(
@@ -52,13 +51,18 @@ def call_openai(system: str, example: str, articles_path: Path) -> str:
 
 # ─── Markdown Linting ───────────────────────────────────────────────────
 def lint_markdown(md: str) -> None:
+    # 1) Exactly 9 top-level headings
     if len(re.findall(r"^#\s+", md, flags=re.MULTILINE)) != 9:
         raise ValueError("Digest must have exactly 9 top-level headings")
+    # 2) Bullets: one emoji & ≤15 words (include U+1F300–U+1FAFF & U+2600–U+26FF)
+    emoji_pattern = r"[\U0001F300-\U0001FAFF\u2600-\u26FF]"
     for b in re.findall(r"^- .+", md, flags=re.MULTILINE):
-        if len(re.findall(r"[\U0001F300-\U0001FAFF]", b)) != 1:
-            raise ValueError(f"Bullet '{b}' needs one emoji")
+        emojis = re.findall(emoji_pattern, b)
+        if len(emojis) != 1:
+            raise ValueError(f"Bullet '{b}' needs exactly one emoji, found {len(emojis)}")
         if len(b.split()) > 15:
             raise ValueError(f"Bullet '{b}' exceeds 15 words")
+    # 3) Sentences ≤15 words
     for s in re.split(r"[.?!]", md):
         if len(s.split()) > 15:
             raise ValueError("A sentence exceeds 15 words")
