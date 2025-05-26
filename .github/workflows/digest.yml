@@ -39,7 +39,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: articles-json
-          path: output
+          path: output/articles.json
 
   render:
     needs: ingest
@@ -70,16 +70,16 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: articles-json
-          path: .     # place contents into workspace root
+          path: .    # writes output/articles.json to workspace
 
-      - name: Render Digest PDF
+      - name: Render Digest to PDF
         run: poetry run python src/render_pdf.py
 
       - name: Upload PDF digest artifact
         uses: actions/upload-artifact@v4
         with:
           name: digest
-          path: output
+          path: output/digest.pdf
 
   publish:
     needs: render
@@ -109,7 +109,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: digest
-          path: .    # place contents into workspace root
+          path: .    # writes output/digest.pdf to workspace
 
       - name: Send Digest via Buttondown
         run: poetry run python src/send_digest.py
