@@ -1,9 +1,10 @@
+# .github/workflows/digest.yml
 name: Build-and-Send Digest
 
 on:
   schedule:
     - cron: '05 10 * * *'   # runs daily at 05:05 CDT
-  workflow_dispatch:       # allows manual trigger
+  workflow_dispatch:
 
 env:
   TZ: America/Chicago
@@ -23,10 +24,11 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          # add texlive-latex-extra so xcolor.sty (and more) are installed
-          sudo apt-get install -y pandoc \
+          sudo apt-get install -y \
+            pandoc \
             texlive-latex-base \
             texlive-latex-extra \
+            texlive-xetex \
             fonts-noto
 
       - name: Install Poetry & Python deps
@@ -48,8 +50,8 @@ jobs:
     needs: ingest
     runs-on: ubuntu-latest
     env:
-      READWISE_TOKEN: ${{ secrets.READWISE_TOKEN }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      READWISE_TOKEN:   ${{ secrets.READWISE_TOKEN }}
+      OPENAI_API_KEY:   ${{ secrets.OPENAI_API_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -60,9 +62,11 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y pandoc \
+          sudo apt-get install -y \
+            pandoc \
             texlive-latex-base \
             texlive-latex-extra \
+            texlive-xetex \
             fonts-noto
 
       - name: Install Poetry & Python deps
@@ -112,9 +116,11 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y pandoc \
+          sudo apt-get install -y \
+            pandoc \
             texlive-latex-base \
             texlive-latex-extra \
+            texlive-xetex \
             fonts-noto
 
       - name: Install Poetry & Python deps
