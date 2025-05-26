@@ -18,13 +18,13 @@ API_KEY = os.getenv("OPENAI_API_KEY")
 if not API_KEY:
     raise RuntimeError("OPENAI_API_KEY missing")
 
-client = OpenAI(api_key=API_KEY)
+client = OpenAI()
 
 # ─── Paths ──────────────────────────────────────────────────────────────
 ARTICLES_JSON = Path("output/articles.json")
-PROMPTS_DIR    = Path("prompts")
-MD_OUT         = Path("output/digest.md")
-PDF_OUT        = Path("output/digest.pdf")
+PROMPTS_DIR   = Path("prompts")
+MD_OUT        = Path("output/digest.md")
+PDF_OUT       = Path("output/digest.pdf")
 
 # ─── Prompt Loading ─────────────────────────────────────────────────────
 def load_prompts() -> tuple[str, str]:
@@ -36,9 +36,13 @@ def load_prompts() -> tuple[str, str]:
 def call_openai(system_prompt: str, example_prompt: str, articles_path: Path) -> str:
     articles = json.loads(articles_path.read_text())
     messages = [
-        {"role": "system",  "content": system_prompt},
-        {"role": "user",    "content": example_prompt},
-        {"role": "user",    "content": "Generate digest for these articles:\n" + json.dumps(articles, indent=2)},
+        {"role": "system", "content": system_prompt},
+        {"role": "user",   "content": example_prompt},
+        {
+            "role": "user",
+            "content": "Generate digest for these articles:\n" + 
+                       json.dumps(articles, indent=2)
+        }
     ]
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
