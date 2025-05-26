@@ -11,6 +11,9 @@ env:
 jobs:
   ingest:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./ohmbudsman-digest-pipeline
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -41,6 +44,9 @@ jobs:
 
   render:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./ohmbudsman-digest-pipeline
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -76,6 +82,9 @@ jobs:
 
   publish:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./ohmbudsman-digest-pipeline
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
