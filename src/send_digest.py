@@ -1,65 +1,46 @@
+#!/usr/bin/env python3
+"""
+Create a Buttondown **draft** email from output/digest_output.md
+and log status + response.
+"""
+
 import os
+import sys
 import requests
-import hashlib
-import datetime
+from datetime import datetime
+from pathlib import Path
 
-# Configuration
-BUTTONDOWN_API_KEY = os.getenv("BUTTONDOWN_API_KEY")
-DIGEST_FILE = "digest_output.md"
-DIGEST_DATE = datetime.date.today().strftime("%Y-%m-%d")
-TITLE = f"Ohmbudsman Digest – {DIGEST_DATE}"
-AUTHOR = "Justin Waldrop"
-VENTURE = "Ohmbudsman Media LLC"
-VERSION = "v1.0"
-LICENSE = "CC-BY-NC"
+TOKEN = os.getenv("BUTTONDOWN_TOKEN")
+if not TOKEN:
+    sys.exit("❌ BUTTONDOWN_TOKEN not set")
 
-# Read digest content
-def read_digest():
-    with open(DIGEST_FILE, "r", encoding="utf-8") as file:
-        return file.read()
+md_file = Path("output/digest_output.md")
+if not md_file.exists():
+    sys.exit("❌ output/digest_output.md not found")
 
-# Build metadata
-def build_metadata(content):
-    sha256_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
-    metadata = f"""---
-title: {TITLE}
-author: {AUTHOR}
-venture: {VENTURE}
-version: {VERSION}
-date: {DIGEST_DATE}
-sha256: {sha256_hash}
-license: {LICENSE}
----
+body_md = md_file.read_text(encoding="utf-8")
+today = datetime.utcnow().strftime("%Y-%m-%d")
+subject = f"Ohmbudsman Digest — {today}"
 
-"""
-    return metadata + content + f"""
+payload = {
+    "subject": subject,
+    "body": body_md,
+    "status": "draft"
+}
+headers = {
+    "Authorization": f"Token {TOKEN}",
+    "Content-Type": "application/json"
+}
 
----
-Licensed under Creative Commons BY-NC 4.0  
-https://creativecommons.org/licenses/by-nc/4.0/
-"""
+print("→ Sending draft to Buttondown…")
+resp = requests.post(
+    "https://api.buttondown.com/v1/emails",
+    headers=headers,
+    json=payload,
+    timeout=30
+)
 
-# Create draft email
-def create_draft_email(content):
-    url = "https://api.buttondown.email/v1/emails"
-    headers = {
-        "Authorization": f"Token {BUTTONDOWN_API_KEY}"
-    }
-    data = {
-        "subject": TITLE,
-        "body": content,
-        "status": "draft"
-    }
-    response = requests.post(url, headers=headers, json=data)
-    response.raise_for_status()
-    return response.json()
-
-# Main execution
-if __name__ == "__main__":
-    try:
-        digest_content = read_digest()
-        full_content = build_metadata(digest_content)
-        result = create_draft_email(full_content)
-        print(f"Draft created successfully. Email ID: {result['id']}")
-    except Exception as e:
-        print(f"An error occurred: {e}")
+print("← Buttondown response status:", resp.status_code)
+print(resp.text)
+resp.raise_for_status()
+print("✔  Draft created successfully.")
