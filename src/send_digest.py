@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Create a Buttondown **draft** email from output/digest_output.md
-and log status + response.
+Create a Buttondown **draft** email from the Disguised-SNAP markdown digest.
+It looks in 'output/digest_output.md' or, if missing, 'digest_output.md'.
 """
 
 import os
@@ -14,25 +14,32 @@ TOKEN = os.getenv("BUTTONDOWN_TOKEN")
 if not TOKEN:
     sys.exit("❌ BUTTONDOWN_TOKEN not set")
 
-md_file = Path("output/digest_output.md")
-if not md_file.exists():
-    sys.exit("❌ output/digest_output.md not found")
+# locate the digest markdown
+out_md  = Path("output/digest_output.md")
+root_md = Path("digest_output.md")
 
-body_md = md_file.read_text(encoding="utf-8")
-today = datetime.utcnow().strftime("%Y-%m-%d")
+if out_md.exists():
+    md_path = out_md
+elif root_md.exists():
+    md_path = root_md
+else:
+    sys.exit("❌ digest_output.md not found in output/ or repo root")
+
+body_md = md_path.read_text(encoding="utf-8")
+today   = datetime.utcnow().strftime("%Y-%m-%d")
 subject = f"Ohmbudsman Digest — {today}"
 
 payload = {
     "subject": subject,
-    "body": body_md,
-    "status": "draft"
+    "body":    body_md,
+    "status":  "draft"
 }
 headers = {
     "Authorization": f"Token {TOKEN}",
-    "Content-Type": "application/json"
+    "Content-Type":  "application/json"
 }
 
-print("→ Sending draft to Buttondown…")
+print(f"→ Sending draft ({md_path}) to Buttondown…")
 resp = requests.post(
     "https://api.buttondown.com/v1/emails",
     headers=headers,
