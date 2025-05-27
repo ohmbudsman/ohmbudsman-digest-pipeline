@@ -1,107 +1,94 @@
-name: Build-and-Send Digest
+name: Ohmbudsman Digest
 
 on:
   schedule:
-    - cron: '05 10 * * *'   # runs daily at 05:05 CDT
+    - cron: "05 10 * * *"   # daily at 05:05 CDT
   workflow_dispatch:
-
-env:
-  TZ: America/Chicago
 
 jobs:
   ingest:
     runs-on: ubuntu-latest
     env:
       READWISE_TOKEN: ${{ secrets.READWISE_TOKEN }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
-      - name: Install system dependencies
+      - name: Install system deps
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            pandoc \
-            texlive-latex-base \
-            texlive-latex-extra \
-            texlive-xetex \
-            fonts-noto
+            pandoc texlive-latex-base texlive-latex-extra \
+            texlive-xetex fonts-noto
 
-      - name: Install Poetry & Python deps
+      - name: Install Poetry deps
         run: |
           pip install poetry
           poetry install --no-root
 
-      - name: Fetch Reader articles
-        run: poetry run python src/fetch_summaries.py
+      - name: Generate Markdown Digest
+        run: poetry run python src/generate_digest.py
 
-      - name: Upload articles-json artifact
+      - name: Upload markdown artifact
         uses: actions/upload-artifact@v4
         with:
-          name: articles-json
-          path: output/articles.json
+          name: markdown
+          path: output/digest_output.md
           if-no-files-found: error
 
   render:
     needs: ingest
     runs-on: ubuntu-latest
     env:
-      READWISE_TOKEN:   ${{ secrets.READWISE_TOKEN }}
-      OPENAI_API_KEY:   ${{ secrets.OPENAI_API_KEY }}
+      # no new secrets needed for PDF/Pages
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
-      - name: Install system dependencies
+      - name: Install system deps
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            pandoc \
-            texlive-latex-base \
-            texlive-latex-extra \
-            texlive-xetex \
-            fonts-noto
+            pandoc texlive-latex-base texlive-latex-extra \
+            texlive-xetex fonts-noto git
 
-      - name: Install Poetry & Python deps
+      - name: Install Poetry deps
         run: |
           pip install poetry
           poetry install --no-root
 
-      - name: Download articles-json artifact
+      - name: Download markdown artifact
         uses: actions/download-artifact@v4
         with:
-          name: articles-json
+          name: markdown
           path: .
 
-      - name: Ensure output/articles.json exists
-        run: |
-          if [ -f output/articles.json ]; then
-            echo "✔ output/articles.json in place"
-          elif [ -f articles.json ]; then
-            mkdir -p output
-            mv articles.json output/articles.json
-          else
-            echo "❌ Missing articles.json" && exit 1
-          fi
-
-      - name: Render Digest PDF
+      - name: Render PDF
         run: poetry run python src/render_pdf.py
 
-      - name: Upload digest artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: digest
-          path: output/digest.pdf
-          if-no-files-found: error
+      - name: Push PDF to gh-pages
+        run: |
+          BRANCH=gh-pages
+          PDF_NAME=$(date +'%Y-%m-%d').pdf
+          git config --global user.email "ci@github"
+          git config --global user.name  "ci-bot"
+          git fetch origin $BRANCH || git branch $BRANCH
+          git switch $BRANCH
+          mkdir -p digests
+          cp output/digest.pdf digests/$PDF_NAME
+          git add digests/$PDF_NAME
+          git commit -m "Add $PDF_NAME" || echo "no changes"
+          git push origin $BRANCH
 
   publish:
-    needs: render
+    needs: ingest
     runs-on: ubuntu-latest
     env:
       BUTTONDOWN_TOKEN: ${{ secrets.BUTTONDOWN_TOKEN }}
@@ -110,39 +97,18 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            pandoc \
-            texlive-latex-base \
-            texlive-latex-extra \
-            texlive-xetex \
-            fonts-noto
-
-      - name: Install Poetry & Python deps
+      - name: Install Poetry deps
         run: |
           pip install poetry
           poetry install --no-root
 
-      - name: Download digest artifact
+      - name: Download markdown artifact
         uses: actions/download-artifact@v4
         with:
-          name: digest
+          name: markdown
           path: .
 
-      - name: Ensure output/digest.pdf exists
-        run: |
-          if [ -f output/digest.pdf ]; then
-            echo "✔ output/digest.pdf in place"
-          elif [ -f digest.pdf ]; then
-            mkdir -p output
-            mv digest.pdf output/digest.pdf
-          else
-            echo "❌ Missing digest.pdf" && exit 1
-          fi
-
-      - name: Send Digest via Buttondown
+      - name: Create Buttondown draft
         run: poetry run python src/send_digest.py
