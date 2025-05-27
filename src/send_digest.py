@@ -1,36 +1,65 @@
 import os
 import requests
+import hashlib
+import datetime
 
+# Configuration
 BUTTONDOWN_API_KEY = os.getenv("BUTTONDOWN_API_KEY")
-BUTTONDOWN_API_URL = "https://api.buttondown.email/v1/emails"
+DIGEST_FILE = "digest_output.md"
+DIGEST_DATE = datetime.date.today().strftime("%Y-%m-%d")
+TITLE = f"Ohmbudsman Digest – {DIGEST_DATE}"
+AUTHOR = "Justin Waldrop"
+VENTURE = "Ohmbudsman Media LLC"
+VERSION = "v1.0"
+LICENSE = "CC-BY-NC"
 
-def send_digest(subject, body, pdf_url=None):
-    """
-    Sends the digest email to Buttondown in DRAFT mode.
+# Read digest content
+def read_digest():
+    with open(DIGEST_FILE, "r", encoding="utf-8") as file:
+        return file.read()
 
-    Args:
-        subject (str): The subject line of the email.
-        body (str): The body content of the email in Markdown.
-        pdf_url (str, optional): URL to the downloadable PDF version of the digest.
-    """
+# Build metadata
+def build_metadata(content):
+    sha256_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    metadata = f"""---
+title: {TITLE}
+author: {AUTHOR}
+venture: {VENTURE}
+version: {VERSION}
+date: {DIGEST_DATE}
+sha256: {sha256_hash}
+license: {LICENSE}
+---
+
+"""
+    return metadata + content + f"""
+
+---
+Licensed under Creative Commons BY-NC 4.0  
+https://creativecommons.org/licenses/by-nc/4.0/
+"""
+
+# Create draft email
+def create_draft_email(content):
+    url = "https://api.buttondown.email/v1/emails"
     headers = {
         "Authorization": f"Token {BUTTONDOWN_API_KEY}"
     }
-
-    if pdf_url:
-        body += f"\n\n---\n\n[📄 View the PDF version of this digest]({pdf_url})"
-
     data = {
-        "subject": subject,
-        "body": body,
+        "subject": TITLE,
+        "body": content,
         "status": "draft"
     }
+    response = requests.post(url, headers=headers, json=data)
+    response.raise_for_status()
+    return response.json()
 
-    response = requests.post(BUTTONDOWN_API_URL, headers=headers, json=data)
-
+# Main execution
+if __name__ == "__main__":
     try:
-        response.raise_for_status()
-        print(f"✅ Draft created successfully with ID: {response.json().get('id')}")
-    except requests.HTTPError as err:
-        print(f"❌ Failed to create draft: {err.response.text}")
-        raise
+        digest_content = read_digest()
+        full_content = build_metadata(digest_content)
+        result = create_draft_email(full_content)
+        print(f"Draft created successfully. Email ID: {result['id']}")
+    except Exception as e:
+        print(f"An error occurred: {e}")
