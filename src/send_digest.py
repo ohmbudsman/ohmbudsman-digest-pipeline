@@ -1,54 +1,71 @@
-#!/usr/bin/env python3
 import os
-import sys
+import hashlib
+import datetime
 import requests
-from datetime import datetime
 
-# Configuration: ensure these env vars are set in your GitHub Action or shell
+# --- CONFIGURATION ---
 BUTTONDOWN_TOKEN = os.getenv("BUTTONDOWN_TOKEN")
-PDF_URL           = os.getenv("PDF_URL")  # e.g. https://mycdn.com/2025-05-26_digest.pdf
+ASSISTANT_DIGEST_OUTPUT = "digest_output.md"  # Expected output from assistant
+DIGEST_DATE = datetime.date.today().strftime("%Y-%m-%d")
+TITLE = f"Ohmbudsman Digest – {DIGEST_DATE}"
+AUTHOR = "Justin Waldrop"
+VENTURE = "Ohmbudsman Media LLC"
+VERSION = "v1.0"
+LICENSE = "CC-BY-NC"
 
-if not BUTTONDOWN_TOKEN:
-    print("ERROR: BUTTONDOWN_TOKEN not set", file=sys.stderr)
-    sys.exit(1)
+# --- READ DIGEST CONTENT ---
+def read_digest_content():
+    if not os.path.exists(ASSISTANT_DIGEST_OUTPUT):
+        raise FileNotFoundError(f"Digest output file '{ASSISTANT_DIGEST_OUTPUT}' not found.")
+    with open(ASSISTANT_DIGEST_OUTPUT, "r", encoding="utf-8") as f:
+        return f.read()
 
-if not PDF_URL:
-    print("ERROR: PDF_URL not set", file=sys.stderr)
-    sys.exit(1)
+# --- GENERATE METADATA FRONTMATTER ---
+def build_metadata(markdown_text):
+    sha = hashlib.sha256(markdown_text.encode('utf-8')).hexdigest()
+    frontmatter = f"""---
+title: {TITLE}
+author: {AUTHOR}
+venture: {VENTURE}
+version: {VERSION}
+date: {DIGEST_DATE}
+sha256: {sha}
+license: {LICENSE}
+---
 
-def main():
-    # Prepare email metadata
-    today = datetime.utcnow().strftime("%Y-%m-%d")
-    subject = f"Ohmbudsman Digest {today}"
-    body_md = (
-        f"Hello,\n\n"
-        f"Your Ohmbudsman Digest for **{today}** is available here:\n\n"
-        f"[Download the PDF version]({PDF_URL})\n\n"
-        f"— Ohmbudsman\n"
-    )
+"""
+    return frontmatter + markdown_text + """
 
-    # Build request
-    url = "https://api.buttondown.com/v1/emails"
-    headers = {
-        "Authorization": f"Token {BUTTONDOWN_TOKEN}",
-        "Content-Type":  "application/json",
-    }
+---
+Licensed under Creative Commons BY-NC 4.0  
+https://creativecommons.org/licenses/by-nc/4.0/
+"""
+
+# --- POST TO BUTTONDOWN ---
+def post_to_buttondown(digest_content):
+    headers = {"Authorization": f"Token {BUTTONDOWN_TOKEN}"}
     payload = {
-        "subject": subject,
-        "body":    body_md,
-        # omit "status" to send immediately; use "scheduled" + "publish_date" to schedule
+        "subject": TITLE,
+        "body": digest_content,
+        "status": "draft"  # Always DRAFT
     }
+    response = requests.post("https://api.buttondown.email/v1/emails", headers=headers, json=payload)
+    response.raise_for_status()
+    return response.json()
 
-    # Send
-    resp = requests.post(url, headers=headers, json=payload)
-    try:
-        resp.raise_for_status()
-    except requests.HTTPError as e:
-        print(f"ERROR: Buttondown responded {resp.status_code}:\n{resp.text}", file=sys.stderr)
-        sys.exit(1)
-
-    print("✔ Email sent successfully!")
-    print(resp.json())  # log the API response for auditing
-
+# --- MAIN EXECUTION ---
 if __name__ == "__main__":
-    main()
+    try:
+        print("Reading Disguised-SNAP formatted digest content...")
+        markdown_text = read_digest_content()
+
+        print("Building full metadata-wrapped digest body...")
+        digest_full = build_metadata(markdown_text)
+
+        print("Posting digest draft to Buttondown...")
+        result = post_to_buttondown(digest_full)
+        print("Draft created successfully. Email ID:", result['id'])
+
+    except Exception as e:
+        print("ERROR:", e)
+        raise
