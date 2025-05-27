@@ -68,6 +68,18 @@ jobs:
           name: markdown
           path: .
 
+      - name: Normalize markdown path
+        run: |
+          # If artifact extracted at root, move it
+          if [ -f digest_output.md ]; then
+            mkdir -p output
+            mv digest_output.md output/digest_output.md
+          fi
+          # Fail if missing
+          if [ ! -f output/digest_output.md ]; then
+            echo "❌ Missing output/digest_output.md" && exit 1
+          fi
+
       - name: Render PDF
         run: poetry run python src/render_pdf.py
 
