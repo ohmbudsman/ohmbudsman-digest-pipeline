@@ -1,54 +1,67 @@
 #!/usr/bin/env python3
+"""
+Send the daily digest email via Buttondown.
+
+Needs:
+  BUTTONDOWN_TOKEN  – stored in GitHub Secrets.
+
+Reads PDF_URL from env (set by the render job). If missing, it builds a
+fallback URL based on GitHub Pages.
+"""
+
 import os
 import sys
-import requests
 from datetime import datetime
+import requests
 
-# Configuration: ensure these env vars are set in your GitHub Action or shell
+# ─── Env vars ──────────────────────────────────────────────────────────
 BUTTONDOWN_TOKEN = os.getenv("BUTTONDOWN_TOKEN")
-PDF_URL           = os.getenv("PDF_URL")  # e.g. https://mycdn.com/2025-05-26_digest.pdf
+PDF_URL          = os.getenv("PDF_URL")
+RUN_ID           = os.getenv("GITHUB_RUN_ID")
+PAGES_BASE       = "https://ohmbudsman.github.io/ohmbudsman-digest-pipeline"
 
 if not BUTTONDOWN_TOKEN:
-    print("ERROR: BUTTONDOWN_TOKEN not set", file=sys.stderr)
-    sys.exit(1)
+    sys.exit("❌ BUTTONDOWN_TOKEN not set")
 
+# Fallback URL if pipeline didn't export one
 if not PDF_URL:
-    print("ERROR: PDF_URL not set", file=sys.stderr)
-    sys.exit(1)
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    PDF_URL = f"{PAGES_BASE}/digests/{today}.pdf"
 
-def main():
-    # Prepare email metadata
+# Final check
+if not PDF_URL:
+    sys.exit("❌ PDF_URL could not be resolved")
+
+# ─── Send email ────────────────────────────────────────────────────────
+def main() -> None:
     today = datetime.utcnow().strftime("%Y-%m-%d")
     subject = f"Ohmbudsman Digest {today}"
-    body_md = (
+    body = (
         f"Hello,\n\n"
-        f"Your Ohmbudsman Digest for **{today}** is available here:\n\n"
+        f"Your Ohmbudsman Digest for **{today}** is ready.\n\n"
         f"[Download the PDF version]({PDF_URL})\n\n"
-        f"— Ohmbudsman\n"
+        f"— Ohmbudsman"
     )
 
-    # Build request
-    url = "https://api.buttondown.com/v1/emails"
     headers = {
         "Authorization": f"Token {BUTTONDOWN_TOKEN}",
-        "Content-Type":  "application/json",
+        "Content-Type": "application/json",
     }
-    payload = {
-        "subject": subject,
-        "body":    body_md,
-        # omit "status" to send immediately; use "scheduled" + "publish_date" to schedule
-    }
+    payload = {"subject": subject, "body": body}
 
-    # Send
-    resp = requests.post(url, headers=headers, json=payload)
+    resp = requests.post(
+        "https://api.buttondown.com/v1/emails",
+        headers=headers,
+        json=payload,
+        timeout=30,
+    )
     try:
         resp.raise_for_status()
-    except requests.HTTPError as e:
-        print(f"ERROR: Buttondown responded {resp.status_code}:\n{resp.text}", file=sys.stderr)
-        sys.exit(1)
+    except requests.HTTPError:
+        print(resp.text, file=sys.stderr)
+        raise
 
-    print("✔ Email sent successfully!")
-    print(resp.json())  # log the API response for auditing
+    print("✔ Email sent!", resp.json())
 
 if __name__ == "__main__":
     main()
