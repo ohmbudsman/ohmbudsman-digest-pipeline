@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write         # allow pushing to gh-pages
+  contents: write         # needed to push to gh-pages
 
 jobs:
   ingest:
@@ -95,7 +95,7 @@ jobs:
           mkdir -p digests
           cp output/digest.pdf digests/$PDF_NAME
           git add digests/$PDF_NAME
-          git commit -m "Add $PDF_NAME (run $GITHUB_RUN_ID)" || echo "No changes to commit"
+          git commit -m "Add $PDF_NAME (run $GITHUB_RUN_ID)" || echo "No changes"
           git push origin $BRANCH
 
   publish:
@@ -120,6 +120,13 @@ jobs:
         with:
           name: markdown
           path: .
+
+      - name: Normalize markdown path for publish
+        run: |
+          if [ -f digest_output.md ]; then
+            mkdir -p output
+            mv digest_output.md output/digest_output.md
+          fi
 
       - name: Create Buttondown draft
         run: poetry run python src/send_digest.py
