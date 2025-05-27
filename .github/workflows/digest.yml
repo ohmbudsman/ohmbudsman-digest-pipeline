@@ -16,7 +16,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
       - name: Install system deps
         run: |
@@ -43,14 +43,12 @@ jobs:
   render:
     needs: ingest
     runs-on: ubuntu-latest
-    env:
-      # no new secrets needed for PDF/Pages
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
       - name: Install system deps
         run: |
@@ -84,11 +82,11 @@ jobs:
           mkdir -p digests
           cp output/digest.pdf digests/$PDF_NAME
           git add digests/$PDF_NAME
-          git commit -m "Add $PDF_NAME" || echo "no changes"
+          git commit -m "Add $PDF_NAME (run $GITHUB_RUN_ID)" || echo "No changes to commit"
           git push origin $BRANCH
 
   publish:
-    needs: ingest
+    needs: render
     runs-on: ubuntu-latest
     env:
       BUTTONDOWN_TOKEN: ${{ secrets.BUTTONDOWN_TOKEN }}
@@ -97,7 +95,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
       - name: Install Poetry deps
         run: |
