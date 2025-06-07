@@ -38,3 +38,21 @@ This site is indexed with schema.org metadata, signed updates, and regular struc
 **License:** CC BY-NC 4.0  
 **Maintained by:** Justin Waldrop  
 [ohmbudsman.com](https://ohmbudsman.com)
+
+## 🚀 Automated Digest Pipeline
+
+New markdown files placed in `digests/` trigger the GitHub Actions workflow `automation.yml` which runs the following scripts located under `scripts/`:
+
+| Script | Purpose |
+| ------ | ------- |
+| `generate_pdf.py` | Convert the digest markdown to a styled PDF saved in `outputs/pdfs/` |
+| `create_social_snippets.py` | Produce social media highlights saved as JSON in `outputs/social/` |
+| `generate_podcast.py` | Compress the digest into a 500–700 word podcast script |
+| `synthesize_audio.py` | Generate an MP3 narration from the script and save to `outputs/podcasts/` |
+| `update_metadata.py` | Append a record to `metadata/content_index.csv` |
+| `archive_assets.py` | Zip assets and upload to HuggingFace for archival |
+
+The workflow requires the following repository secrets:
+`OPENAI_API_KEY`, `ELEVENLABS_API_KEY`, `TRANSISTOR_API_KEY`, and `HUGGINGFACE_TOKEN`.
+
+All generated assets are committed back to the repository and attached to a GitHub Release tagged with the digest name.
