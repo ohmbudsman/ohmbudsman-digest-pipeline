@@ -6,7 +6,7 @@ authors = ["Justin Waldrop <you@example.com>"]
 
 [tool.poetry.dependencies]
 python = "^3.11"
-openai = "0.28.0"
+openai = "^1.14.3"
 requests = "2.32.0"
 python-dotenv = "1.0.0"
 # … your other deps …
